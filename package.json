@@ -1,0 +1,69 @@
+{
+  "name": "dsh-screenwriter-desk",
+  "version": "0.5.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/index.mjs",
+    "test": "node --test tests/domain.test.mjs tests/api.test.mjs tests/plugin.test.mjs tests/assistant.test.mjs tests/assistant-execute.test.mjs tests/assistant-ui.test.mjs tests/revisions.test.mjs tests/revisions-ui.test.mjs tests/novel.test.mjs tests/novel-ui.test.mjs",
+    "build:plugin": "node scripts/build-plugin.mjs",
+    "dev": "vite",
+    "build": "vite build && node scripts/prepare-sites-build.mjs && node scripts/build-plugin.mjs",
+    "preview": "vite preview",
+    "test:sites": "node --test tests/sites-worker.test.mjs"
+  },
+  "dependencies": {
+    "docx": "^9.15.3"
+  },
+  "description": "多项目小说与剧本创作工作台：作品设定、人物世界观、章节与分场、正文、AI 协作与版本导出。",
+  "main": "plugin/host.mjs",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20",
+    "dsh": ">=0.2.1-rc.5 <0.3.0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./plugin/cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime"
+      ]
+    }
+  },
+  "exports": {
+    ".": "./plugin/host.mjs",
+    "./client": "./dist/plugin.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "server",
+    "shared",
+    "plugin",
+    "dist/plugin.js",
+    "dist/client",
+    "CONTRACT.md",
+    "README.md",
+    "LICENSE",
+    "启动编剧工作台.command"
+  ],
+  "devDependencies": {
+    "@phosphor-icons/react": "^2.1.10",
+    "@vitejs/plugin-react": "5.0.4",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "vite": "6.4.2",
+    "esbuild": "0.25.12"
+  },
+  "packageManager": "pnpm@11.25.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/giuliano1101/DSH-StoryDesk.git"
+  },
+  "homepage": "https://github.com/giuliano1101/DSH-StoryDesk#readme",
+  "bugs": {
+    "url": "https://github.com/giuliano1101/DSH-StoryDesk/issues"
+  }
+}
