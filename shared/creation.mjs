@@ -24,5 +24,5 @@ const copies = {
 };
 for (const copy of Object.values(copies)) { Object.freeze(copy.tabs); Object.freeze(copy.stages); Object.freeze(copy.brief); Object.freeze(copy); }
 export function creationCopy(format) { return copies[format === 'novel' ? 'novel' : 'screenplay']; }
-const roles = { overview: 'manager', projects: 'manager', tasks: 'manager', shared: 'librarian', brief: 'story', library: 'character', scenes: 'structure', script: 'writer' };
+const roles = { overview: 'manager', projects: 'manager', trash: 'manager', tasks: 'manager', shared: 'librarian', brief: 'story', library: 'character', scenes: 'structure', script: 'writer' };
 export function roleForPage(page, format) { return Object.hasOwn(roles, page) ? `${format === 'novel' ? 'novel-' : ''}${roles[page]}` : undefined; }

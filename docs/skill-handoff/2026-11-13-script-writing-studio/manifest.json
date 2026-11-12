@@ -1,0 +1,201 @@
+{
+  "source": "MacBook .codex/skills/script-writing-studio",
+  "files": [
+    {
+      "path": "script-writing-studio/使用手册.md",
+      "bytes": 28750,
+      "sha256": "3e93d0a01eef4926ff250acce9a011b1637e4d91a15f52820c225cf06a203668"
+    },
+    {
+      "path": "script-writing-studio/SKILL.md",
+      "bytes": 20769,
+      "sha256": "1f51d69625ff39db4d4011c2122f2b646769932a11ab6e0b83abab9f10dcade2"
+    },
+    {
+      "path": "script-writing-studio/references/01b-modes-format.md",
+      "bytes": 9032,
+      "sha256": "c1a4c578d141b2edef0f756b80bc6f4f822920596328185ec115cf2571881227"
+    },
+    {
+      "path": "script-writing-studio/references/01b-script-drafting.md",
+      "bytes": 9100,
+      "sha256": "f9b233c6e522bb285db6f84d09b8887bad0ab38f2f55bc5190b6419ddea33f7e"
+    },
+    {
+      "path": "script-writing-studio/references/01-script-creation.md",
+      "bytes": 31945,
+      "sha256": "2fb5e10c09e96eea2145c1cee6af0f21aab80b48ab5dc1333889b1cf79f13c76"
+    },
+    {
+      "path": "script-writing-studio/references/06-diagnostics.md",
+      "bytes": 26625,
+      "sha256": "24d07d7a97a6266e49ed6140c3773ecab239d5f7e9b9fc02528c4dff8545d540"
+    },
+    {
+      "path": "script-writing-studio/references/02-boundary-interface.md",
+      "bytes": 11717,
+      "sha256": "8b4e6d7f4ec831c1ede4073da9ca3ba85903d3ea9db8d87354d662e5d3aef10a"
+    },
+    {
+      "path": "script-writing-studio/references/04-core-workflow.md",
+      "bytes": 86661,
+      "sha256": "e09f84c75f43e528d1a36b3c4510d7feb945b8ee68a4ff2e87b05f6ca8164e56"
+    },
+    {
+      "path": "script-writing-studio/references/04b-camera-action-cheatsheet.md",
+      "bytes": 16075,
+      "sha256": "3adea7274b1838ef0f9926326340183564e6c2e5192cc6df609be234b5eab818"
+    },
+    {
+      "path": "script-writing-studio/references/06-seedance2-adapter.md",
+      "bytes": 20994,
+      "sha256": "5184ed4d760d47d4154592b58a85e88e84031c865e75843c61c8e6ca6d247967"
+    },
+    {
+      "path": "script-writing-studio/references/02-script-doctor.md",
+      "bytes": 8309,
+      "sha256": "2742db180adb433924df7fa0ca21b0e10a2191c676d1bc52ff87ac5259363ac5"
+    },
+    {
+      "path": "script-writing-studio/references/06-continuity-assets.md",
+      "bytes": 17951,
+      "sha256": "14ab5ddd312231a3ebec9507ff9f9e88d8db65c694ff8f3f3278dc6d5d926827"
+    },
+    {
+      "path": "script-writing-studio/references/05-style-character.md",
+      "bytes": 20246,
+      "sha256": "51c6aa113a3e0b831721bd81dec8c677677102c0792cdcea170857ce726e2510"
+    },
+    {
+      "path": "script-writing-studio/references/04-ai-video-storyboard.md",
+      "bytes": 12617,
+      "sha256": "5d7a846c367edc7a840f7dcc202564d063962fec78d4b0005895e2e03b6c6a0b"
+    },
+    {
+      "path": "script-writing-studio/references/05-scene-continuity.md",
+      "bytes": 15703,
+      "sha256": "fec2f18135cf6769e19eabc4858a5caf38ecd73e73bfe0d792ec5110d95a318a"
+    },
+    {
+      "path": "script-writing-studio/references/04-field-methods.md",
+      "bytes": 35020,
+      "sha256": "6789a6ac143a8517c44ea6858770c62ddbbb404d57b23ff652b654e8c3a75c8d"
+    },
+    {
+      "path": "script-writing-studio/references/07-post-music-sound-design.md",
+      "bytes": 18027,
+      "sha256": "ff083b1625612e563ec77975f644054878fe6d6b1ac7a75c03acd6909f7e5043"
+    },
+    {
+      "path": "script-writing-studio/references/04b-superpower-action.md",
+      "bytes": 3892,
+      "sha256": "94e769341b335013580b0f4ff82ab63536de264bcf01d7867af590dd7bb54082"
+    },
+    {
+      "path": "script-writing-studio/references/01b-boundary-examples.md",
+      "bytes": 14203,
+      "sha256": "bf4dd3f783135f003e61564f44c9879460ece5b810fb0a73bb35f36ba15a305e"
+    },
+    {
+      "path": "script-writing-studio/references/06-core-format.md",
+      "bytes": 79814,
+      "sha256": "6176e04566ae1ffe719bb2630fef4ecaf26b1d3a63337ec28fe5d2acd47098c5"
+    },
+    {
+      "path": "script-writing-studio/references/02-startup-workflow.md",
+      "bytes": 12400,
+      "sha256": "9f97f29aa2d53741acbcae478c31e6031c1cd9e43df78651084241ca550032d9"
+    },
+    {
+      "path": "script-writing-studio/references/01b-rhythm-matrix.md",
+      "bytes": 23185,
+      "sha256": "9246463ba8a88080af29f4f14418907b8890bb0b7a5c4a53457b99aed0a0f4d8"
+    },
+    {
+      "path": "script-writing-studio/references/03-dialogue-expert.md",
+      "bytes": 28678,
+      "sha256": "ec3c387b5b5593395c5e9e80f9a13ddd6ad50bb0f771301430f00f60d517090a"
+    },
+    {
+      "path": "script-writing-studio/references/04b-wuxia-weapons.md",
+      "bytes": 3861,
+      "sha256": "eb307a9d5b9b041eb46eedfa6a4efe53860f8796fef035f16eb83949c82b56b3"
+    },
+    {
+      "path": "script-writing-studio/references/01b-workflow-output.md",
+      "bytes": 7187,
+      "sha256": "ba0531ea64071af985df4ec8a4256b777ee83cb2fa8b1bb0035397df8713d3dc"
+    },
+    {
+      "path": "script-writing-studio/references/06-advanced-director.md",
+      "bytes": 13590,
+      "sha256": "5dc65e5c8fc69c0cd32d719c26cd98d6f3393083e9489299fab532ea351cee5b"
+    },
+    {
+      "path": "script-writing-studio/references/01b-startup-triggers.md",
+      "bytes": 18710,
+      "sha256": "1e1cb63a811b67a6a0d297105b54c463dfdc9f142f222e39fd27ee92070a393d"
+    },
+    {
+      "path": "script-writing-studio/references/02-rules-granularity-output.md",
+      "bytes": 8552,
+      "sha256": "37e6e084e8c714797d25c50cbfeac525f74c5ad2d2a5f7c69415270bfc98e772"
+    },
+    {
+      "path": "script-writing-studio/references/05-handoff-output.md",
+      "bytes": 38422,
+      "sha256": "e8fbfed0f645b702111dd1613300184e95217231f20eb5edf90ff51991520683"
+    },
+    {
+      "path": "script-writing-studio/references/05-crowd-prop.md",
+      "bytes": 9679,
+      "sha256": "62b7055aa0afbd26bd840240ec7aca47084887edf9f19073cff14933717fdb70"
+    },
+    {
+      "path": "script-writing-studio/references/02-panels-examples.md",
+      "bytes": 14017,
+      "sha256": "1f68c5cfea70a73c3d3cf6ba70e8e66bdb6cabc5f0620f66f6c63195d45036c2"
+    },
+    {
+      "path": "script-writing-studio/references/04b-battlefield-action.md",
+      "bytes": 3949,
+      "sha256": "aeba654588eda0c5fbc26e542384c92522f2fe130295d534b4726c7cedce4a9a"
+    },
+    {
+      "path": "script-writing-studio/references/04-appendices.md",
+      "bytes": 25161,
+      "sha256": "7b853b1bcb18197a2b94fdc89fed71a62f1f9cfa8a11ceb07f58201fb7414706"
+    },
+    {
+      "path": "script-writing-studio/references/04b-free-combat.md",
+      "bytes": 4056,
+      "sha256": "e71669cdb5122401ce98d8890f22eb2821bdd0ae9ee60e9431e3c0ed89d1ee61"
+    },
+    {
+      "path": "script-writing-studio/references/04-boundary-diagnostics.md",
+      "bytes": 13378,
+      "sha256": "686b631296a8ac4e6fe1ade64d2c72f1c93226aad62fa30eb7f208f6655df03d"
+    },
+    {
+      "path": "script-writing-studio/references/05-asset-library.md",
+      "bytes": 13702,
+      "sha256": "ba863fa45aa9ecf1802174566a21c31c2e0723bd41af7eb20618a3561df809ec"
+    },
+    {
+      "path": "script-writing-studio/references/05-core-assets.md",
+      "bytes": 10172,
+      "sha256": "c2a794b7472f027fa476d4a3fc5d91f982a238d5fad3642ce7db17617bc45063"
+    },
+    {
+      "path": "script-writing-studio/agents/openai.yaml",
+      "bytes": 314,
+      "sha256": "ab7cc2e2b40d4af35c1a28d7285aa933edeb89b3c953cfe2d71880a2e1d157a2"
+    }
+  ],
+  "unresolved_markdown_tokens": [
+    [
+      "references/05-core-assets.md",
+      "资产总表.md"
+    ]
+  ]
+}

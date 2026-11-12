@@ -1,0 +1,26 @@
+import React,{useCallback,useEffect,useLayoutEffect,useRef,useState} from 'react';
+import {createPortal} from 'react-dom';
+import {Button,IconButton,Field} from '../components';
+import {X} from '@phosphor-icons/react';
+import {createDialogGuard} from '../assistant/dialogGuard.mjs';
+import {exactSelection} from './controller.mjs';
+import {placeSelectionPopup,textareaSelectionRect} from './selectionGeometry.mjs';
+
+export function FloatingComment({p,scene,w,revisions,textarea,tick,request,visible}){
+  const [anchor,setAnchor]=useState(null),[open,setOpen]=useState(false),[error,setError]=useState(''),[busy,setBusy]=useState(false),[,setRefresh]=useState(0),guard=useRef(null),popover=useRef(null),requestSeen=useRef(0);
+  if(!guard.current)guard.current=createDialogGuard();
+  const c=revisions.controller,draft=c.project(p.id).composers?.[scene.id],root=textarea.current?.closest('.sw-plugin-root')||textarea.current?.closest('.app-shell');
+  useLayoutEffect(()=>{guard.current.mount();return()=>guard.current.unmount();},[]);
+  const measure=useCallback(()=>{const el=textarea.current;if(!el)return;const selection={start:el.selectionStart,end:el.selectionEnd,text:el.value.slice(el.selectionStart,el.selectionEnd)};setAnchor(exactSelection(el.value,selection)?textareaSelectionRect(el,selection):null);},[textarea]);
+  useLayoutEffect(()=>{measure();},[tick,visible,w.body(p,scene),measure]);
+  useEffect(()=>{const el=textarea.current;if(!el)return;const observer=new ResizeObserver(()=>{measure();setRefresh(x=>x+1);});observer.observe(el);const update=()=>{measure();setRefresh(x=>x+1);};window.addEventListener('resize',update);window.addEventListener('scroll',update,true);return()=>{observer.disconnect();window.removeEventListener('resize',update);window.removeEventListener('scroll',update,true);};},[measure,textarea]);
+  const close=useCallback(()=>guard.current.dismiss(()=>{setOpen(false);setError('');}),[]);
+  useEffect(()=>{if(!open)return;const key=e=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}};window.addEventListener('keydown',key,true);return()=>window.removeEventListener('keydown',key,true);},[open,close]);
+  const begin=()=>{const el=textarea.current,selection={start:el.selectionStart,end:el.selectionEnd,text:el.value.slice(el.selectionStart,el.selectionEnd)};if(!exactSelection(w.body(p,scene),selection)||p.status==='archived'||w.isProjectLocked(p.id))return;try{c.capture(p.id,scene.id,selection,{open:false});setError('');}catch(e){if(!draft){w.toast(e.message);return;}setError('这里保留了另一段未保存的意见。请先继续或舍弃原意见。');}setOpen(true);};
+  useEffect(()=>{if(request&&request!==requestSeen.current){requestSeen.current=request;begin();}},[request]);
+  const save=async event=>{event.preventDefault();if(!draft?.instruction.trim()||!guard.current.begin())return;const checkpoint=guard.current.checkpoint(),sentGeneration=draft.generation;setBusy(true);setError('');try{const data=await c.saveComposer(p.id,scene.id,{composerSceneId:scene.id});if(!guard.current.isCurrent(checkpoint))return;if(data&&!c.project(p.id).composers[scene.id]){setOpen(false);w.toast('段落意见已加入助手，可继续收集后统一发送');}else if(c.project(p.id).composers[scene.id]?.generation!==sentGeneration)setError('新意见已保留，可继续保存。');}catch(e){if(guard.current.isCurrent(checkpoint))setError(e.message);}finally{if(guard.current.finish(checkpoint))setBusy(false);}};
+  useLayoutEffect(()=>{if(open)popover.current?.querySelector('textarea')?.focus({preventScroll:true});},[open]);
+  if(!root||!visible)return null;
+  const rootRect=root.getBoundingClientRect(),inset=parseFloat(getComputedStyle(root).getPropertyValue('--sw-native-top-safe-area'))||0,rect=anchor||textarea.current.getBoundingClientRect(),position=placeSelectionPopup(rect,rootRect,{width:open?330:72,height:open?Math.min(380,rootRect.height-inset-16):34},inset);
+  return createPortal(<>{!open&&anchor&&p.status!=='archived'&&<button className="selection-comment-action" style={position} onMouseDown={e=>e.preventDefault()} onClick={begin}>评论</button>}{!open&&draft&&<button className="comment-resume" style={{top:inset+8}} onClick={()=>{setError('');setOpen(true);}}>继续未保存意见</button>}{open&&draft&&<section ref={popover} role="dialog" aria-modal="false" aria-label="段落评论" aria-busy={busy} data-revision-project-id={p.id} data-revision-composer={scene.id} className="comment-popover" style={position}><header><strong>段落评论</strong><IconButton icon={X} label="收起评论并保留草稿" disabled={busy} onClick={close}/></header><blockquote>{draft.selection.text}</blockquote><form onSubmit={save}><fieldset disabled={busy}><Field label="修改意见"><textarea aria-label="段落修改意见" rows={3} maxLength={24000} value={draft.instruction} onChange={e=>c.setComposerInstruction(p.id,scene.id,e.target.value)} placeholder="写下这段怎么改，稍后在助手中统一发送。"/></Field></fieldset>{error&&<p className="error" role="alert">{error}</p>}<footer><Button small type="button" disabled={busy} onClick={()=>{if(!guard.current.dismiss(()=>{c.cancelComposer(p.id,scene.id);setOpen(false);}))return;}}>舍弃草稿</Button><Button small primary disabled={busy||!draft.instruction.trim()||!revisions.snapshot.capabilities?.notes}>{busy?'保存中…':'加入助手'}</Button></footer><small>收起或按 Esc 会保留意见草稿</small></form></section>}</>,root);
+}

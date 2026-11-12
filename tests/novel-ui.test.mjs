@@ -181,8 +181,69 @@ test('mounted shared library repairs status-only target changes before import an
 });
 test('root captures interaction before the busy render and a delayed modal request cannot open during navigation',async()=>{
   let busy=false,release;const held=new Promise(resolve=>{release=resolve;});globalThis.__novelWorkbench={...w,ai:{connected:false},drafts:{},getState:()=>state,navigating:false,isNavigating:()=>busy,flush:()=>held,toast(){}};
-  const harness=await hookComponent("export {default as Component} from './src/App.jsx';",{slots:[false],stubs:{'src/useWorkbench.js':'export function useWorkbench(){return globalThis.__novelWorkbench;}','src/assistant/useAssistant.js':'export function useAssistant(){return {models:{}};}','src/revisions/useRevisions.js':'export function useRevisions(){return {};}'}});
+  const harness=await hookComponent("export {default as Component} from './src/App.jsx';",{slots:[false],stubs:{'src/useWorkbench.js':'export function useWorkbench(){return globalThis.__novelWorkbench;}','src/assistant/useAssistant.js':'export function useAssistant(){return {models:{}};}','src/revisions/useRevisions.js':'export function useRevisions(){return {};}','src/revisions/useRevisionChat.js':'export function useRevisionChat(){return {};}'}});
   let tree=harness.render();const versionButton=walkElements(tree).find(node=>node.children.flat().includes('版本')&&node.props.onClick);assert.ok(versionButton);const pendingModal=versionButton.props.onClick();busy=true;
   const events=[];tree.props.onClickCapture({preventDefault:()=>events.push('prevent'),stopPropagation:()=>events.push('stop')});assert.deepEqual(events,['prevent','stop']);release();await pendingModal;assert.equal(harness.slots[2],null,'delayed version dialog must stay closed until navigation ends');
   globalThis.__novelWorkbench.navigating=true;tree=harness.render();assert.equal(tree.props.inert,true);assert.equal(tree.props['aria-busy'],true);delete globalThis.__novelWorkbench;
+});
+
+test('normal mode projections and recent entry exclude recoverable trash',async()=>{const trashed={...film,id:'trash',title:'废纸篓作品',trashedAt:'2026-11-12'};const live={...state,workspace:{...state.workspace,screen:'overview',creationMode:'screenplay'},projects:[film,trashed,novel]};assert.deepEqual(ui.projectsForMode(live).map(p=>p.id),['f']);assert.deepEqual(ui.projectsForMode(live,{trashed:true}).map(p=>p.id),['trash']);assert.doesNotMatch(await render('CreationEntry',{state:live,w,onChoose(){},onResume(){}}),/废纸篓作品/);});
+test('episode navigation derives owned scene and preserves empty episode destination',async()=>{const series={...film,kind:'电视剧',episodes:[{id:'e1',title:'第一集'},{id:'e2',title:'第二集'}],scenes:[{...chapter,episodeId:'e1'}],view:{tab:'scenes',episodeId:'e1'}};const calls=[];const nav=ui.createWorkspaceNavigation({getState:()=>({...state,projects:[series]}),getCapabilities:()=>({...available,episodes:true}),flush:async()=>{},mutate:async a=>calls.push(a),getView:()=>({cursor:{start:2,end:3}})});await nav.open('f','script',undefined,'e2');assert.deepEqual(calls[0].view,{tab:'script',episodeId:'e2'});await nav.open('f','script','c');assert.equal(calls[2].view.episodeId,'e1');});
+test('episodic outline and empty writer keep episode controls, film and novel do not',async()=>{const series={...film,kind:'电视剧',episodes:[{id:'e1',title:'雪夜'},{id:'e2',title:'晨光'}],scenes:[{...chapter,title:'属于别集',episodeId:'e1'}],view:{tab:'script',episodeId:'e2'}};const enabled={...w,capabilities:{...available,episodes:true}};for(const component of ['ScenesPage','WriterPage']){const html=await render(component,{p:series,w:enabled,revisions});assert.match(html,/当前集/);assert.match(html,/晨光/);assert.match(html,/新增集/);assert.doesNotMatch(html,/属于别集/);}for(const project of [film,novel])assert.doesNotMatch(await render('ScenesPage',{p:project,w:enabled}),/当前集|新增集/);});
+
+test('project trash flushes first, blocks manual edits and leaves recovery data to its owner',async()=>{assert.equal(typeof ui.createProjectLifecycle,'function');const calls=[];let targets=[],fail=true;const live={...state,projects:[film,novel]};const lifecycle=ui.createProjectLifecycle({getState:()=>live,getCapabilities:()=>({projectTrash:true}),flush:async()=>{calls.push('flush');if(fail)throw new Error('保存失败');},mutate:async a=>calls.push(a),dialogs:()=>({editingTargets:targets})});await assert.rejects(lifecycle.trash('f'),/保存失败/);assert.deepEqual(calls,['flush']);fail=false;targets=[{projectIds:['f']}];await assert.rejects(lifecycle.trash('f'),/编辑窗口/);assert.deepEqual(calls,['flush']);targets=[];await lifecycle.trash('f');assert.deepEqual(calls.at(-1),{type:'project.trash',projectId:'f'});});
+test('episode scene order includes archived owned scenes and retains other episode slots',()=>{assert.equal(typeof ui.sceneReorderAction,'function');const series={...film,kind:'电视剧',episodes:[{id:'e1'},{id:'e2'}],view:{episodeId:'e1'},scenes:[{id:'a',episodeId:'e1'},{id:'b',episodeId:'e2'},{id:'archive',episodeId:'e1',archived:true},{id:'c',episodeId:'e1'}]};assert.deepEqual(ui.sceneReorderAction(series,'c','a',{episodes:true}),{type:'scene.reorder',projectId:'f',episodeId:'e1',sceneIds:['c','a','archive']});assert.throws(()=>ui.sceneReorderAction(series,'c','a',{}),/重新打开 Harness/);});
+
+test('project and global page navigation refuses real manual dialogs before flushing',async()=>{const calls=[];const nav=ui.createWorkspaceNavigation({getState:()=>state,getCapabilities:()=>available,dialogs:()=>true,flush:async()=>calls.push('flush'),mutate:async()=>calls.push('mutate')});await assert.rejects(nav.open('n','script','c'),/编辑窗口/);assert.equal(typeof nav.show,'function');await assert.rejects(nav.show('trash'),/编辑窗口/);assert.deepEqual(calls,[]);});
+
+test('manual episode and scene forms cannot be dismissed while their save is pending',async()=>{const harness=await hookComponent("export {FormModal as Component} from './src/components.jsx';");let closeCount=0,release;const held=new Promise(resolve=>{release=resolve;});const tree=harness.render({title:'编辑集',fields:[],onClose:()=>closeCount++,onSave:()=>held});const form=walkElements(tree).find(node=>node.type==='form');const Original=globalThis.FormData;globalThis.FormData=class extends Original{constructor(){super();}};try{const pending=form.props.onSubmit({preventDefault(){},currentTarget:{}});tree.props.onClose();assert.equal(closeCount,0);release();await pending;assert.equal(closeCount,1);}finally{globalThis.FormData=Original;release();}});
+
+test('writer exposes one episode selector shared by narrow and wide layouts',async()=>{const series={...film,kind:'短剧',episodes:[{id:'e1',title:'第一集'}],scenes:[{...chapter,episodeId:'e1'}],view:{tab:'script',episodeId:'e1',sceneId:'c'}};const html=await render('WriterPage',{p:series,w:{...w,capabilities:{episodes:true}},revisions});assert.equal((html.match(/aria-label="当前集"/g)||[]).length,1);});
+
+test('writer ignores recovered inbox visibility and keeps blue assistant entry in every writer state',async()=>{
+  const recovered={controller:{project:()=>({open:true})},snapshot:{pending:{},capabilities:{}}};
+  for(const p of [film,{...film,scenes:[]},{...film,scenes:[{...chapter,archived:true}]}]){
+    const html=await render('WriterPage',{p,w,revisions:recovered});
+    assert.doesNotMatch(html,/批注箱|revision-inbox|段落批注/);
+    assert.match(html,/<button class="button primary[^"]*"[^>]*>[\s\S]*?AI 协助<\/button>/);
+    if(p.scenes.length&&!p.scenes[0].archived){assert.match(html,/剧本正文：归来/);assert.doesNotMatch(html,/writer-manuscript-pane" hidden/);}
+  }
+});
+
+test('paragraph attachments enable empty-instruction send and replace range modes with one collapsed group and honest history',async()=>{
+  const note={id:'queued',sceneId:'c',selection:{start:0,end:2,text:'她想'},instruction:'保留犹豫',version:1,status:'open'};
+  const batch={id:'sent',createdAt:'2026-11-12T02:00:00Z',chatInstruction:'统一克制',model:'真实模型',changes:[{...note,id:'written',noteId:'earlier',noteVersion:1,replacement:'她回忆起',status:'applied'}],preEditVersionIds:[{projectId:'n',versionId:'before'}]};
+  const a={roleId:'novel-writer',context:{page:'script',projectId:'n',sceneId:'c',creationMode:'novel'},key:'novel',assistant:{roles:[{id:'novel-writer',name:'小说助手'}],skills:[],profiles:{global:{'novel-writer':{name:'小说助手',skillIds:[]}}},threads:{}},models:{catalog:null},draft:{mode:'execute',instruction:''},applying:{},turnErrors:{},capabilities:{execute:true},readiness:{label:'可用'},scope:'scene',sendReady:true,pendingCount:0};
+  const revisionChat={notes:[note],batches:[batch],ready:true,busy:false,issue:'',error:'',snapshot:{batchErrors:{}},revisions:{controller:{project:()=>({editors:{}})},viewOriginal(){}},send(){},retry(){}};
+  const html=await render('AssistantPanel',{a,w,open:true,revisionChat});
+  assert.match(html,/1 条段落意见/);assert.doesNotMatch(html,/<details[^>]* open/);assert.match(html,/发送后统一修改标注段落，修改前保留版本/);
+  assert.doesNotMatch(html,/助手工作模式|助手改写范围|一起推进|type="checkbox"/);
+  const send=html.match(/<button[^>]*aria-label="发送助手问题"[^>]*>[\s\S]*?<\/button>/)?.[0];assert.ok(send);assert.doesNotMatch(send,/disabled/);assert.match(send,/发送/);
+  assert.match(html,/统一克制/);assert.match(html,/已写入 1 条段落修改/);assert.match(html,/查看修改前版本/);
+});
+
+test('mounted opinion composer sends by click and guarded shortcut with attachments alone',async()=>{
+  const harness=await hookComponent("export {AssistantComposer as Component} from './src/assistant/AssistantComposer.jsx';"),sent=[];
+  const props={a:{context:{page:'script'},draft:{mode:'rewrite',instruction:''},capabilities:{},scope:'selection',change(){},submit:()=>assert.fail('attachments must use exact revision route')},project:novel,revisionChat:{notes:[{id:'n'}],ready:true,busy:false,send:()=>sent.push('send')}};
+  const tree=harness.render(props),textarea=walkElements(tree).find(node=>node.type==='textarea'),submit=()=>tree.props.onSubmit({preventDefault(){}});
+  submit();assert.equal(sent.length,1);
+  for(const event of [{key:'Enter',metaKey:true,isComposing:true},{key:'Enter',ctrlKey:true,nativeEvent:{isComposing:true}},{key:'Enter'},{key:'Enter',metaKey:true,repeat:true}])textarea.props.onKeyDown({...event,currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});
+  assert.equal(sent.length,1);
+  textarea.props.onKeyDown({key:'Enter',metaKey:true,nativeEvent:{isComposing:false},currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});assert.equal(sent.length,2);
+  const blocked=harness.render({...props,revisionChat:{...props.revisionChat,ready:false}});blocked.props.onSubmit({preventDefault(){}});assert.equal(sent.length,2);
+});
+
+test('opinion inspection waits for navigation and reports blocked navigation without scheduling a false focus',async()=>{
+  let finish,closed=0;const held=new Promise(resolve=>{finish=resolve;}),harness=await hookComponent("import {useRevisions} from './src/revisions/useRevisions.js';export const Component=props=>useRevisions(props.w,{},props.onViewed);"),note={id:'n',sceneId:'c',sourceRevision:0,selection:{start:0,end:2,text:'她想'}};
+  const mounted=harness.render({w:{...w,getState:()=>state,go:()=>held,toast(){}},onViewed:()=>closed++});
+  const inspecting=mounted.viewOriginal('n',note);assert.equal(typeof inspecting?.then,'function');assert.equal(harness.slots[0],null);assert.equal(closed,0);
+  finish(false);await assert.rejects(inspecting,/无法|未能|编辑|跳转/);assert.equal(harness.slots[0],null);assert.equal(closed,0);
+});
+
+
+test('successful opinion inspection reveals the manuscript only after navigation and preserves captured focus',async()=>{
+  let finish,closed=0;const held=new Promise(resolve=>{finish=resolve;}),harness=await hookComponent("import {useRevisions} from './src/revisions/useRevisions.js';export const Component=props=>useRevisions(props.w,{},props.onViewed);"),note={id:'n',sceneId:'c',selection:{start:0,end:2,text:'她想'}};
+  const mounted=harness.render({w:{...w,getState:()=>state,go:()=>held,toast(){}},onViewed:()=>closed++});
+  const inspecting=mounted.viewOriginal('n',note);assert.equal(closed,0);assert.equal(harness.slots[0],null);
+  finish(true);await inspecting;assert.equal(closed,1);assert.equal(harness.slots[0].projectId,'n');assert.equal(harness.slots[0].sceneId,'c');assert.deepEqual(harness.slots[0].selection,note.selection);
 });

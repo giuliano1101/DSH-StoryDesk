@@ -12,7 +12,7 @@ function setup(options={}){
   let state=fixture(),saved={},model={catalog:{mode:'host',connected:true,effective:{provider:'real',model:'actual'}}};const events=[],gate=createEditingGate();
   const w={getState:()=>state,body:(p,s)=>s.body,accept:next=>{events.push(['accept',next]);state=next;},acquireEditingLock:targets=>{events.push(['lock',targets]);return gate.acquire(targets);},releaseEditingLock:token=>{events.push(['release']);gate.release(token);},flush:async args=>{events.push(['flush',args]);if(options.flush)await options.flush(args);},toast:message=>events.push(['toast',message])};
   const storage={getItem:()=>saved.value||null,setItem:(_,value)=>{saved.value=value;}};
-  const request=async(path,payload)=>{events.push(['request',path,structuredClone(payload)]);if(path==='/revisions')return {capabilities:{notes:true,generate:true,apply:true}};return options.request?options.request(path,payload,state):{state:{...state,revision:state.revision+1},result:{appliedChangeIds:payload?.changeIds||[],preEditVersionIds:[{projectId:'p',versionId:'v'}]}};};
+  const request=async(path,payload)=>{events.push(['request',path,structuredClone(payload)]);if(path==='/revisions')return {capabilities:{notes:true,generate:true,apply:true,chat:true}};return options.request?options.request(path,payload,state):{state:{...state,revision:state.revision+1},result:{appliedChangeIds:payload?.changeIds||[],preEditVersionIds:[{projectId:'p',versionId:'v'}]}};};
   const controller=factory()({workbench:()=>w,models:()=>model,storage,dialogs:()=>options.dialogs?.()||{anyOpen:false,editingTargets:[]},request});
   return {controller,events,w,gate,storage,setModel:x=>{model=x;},state:()=>state,setState:x=>{state=x;}};
 }
@@ -151,4 +151,99 @@ test('an open opinion whose scene remains only in a version can edit its instruc
   const html=await renderedInbox({p,scene:p.scenes[0],w:h.w,revisions:{controller:h.controller,snapshot:h.controller.snapshot(),models:{catalog:{connected:false}},viewOriginal(){},beginReanchor(){}}});
   const buttons=html.match(/<button\b[^>]*>[\s\S]*?<\/button>/g)||[],edit=buttons.find(button=>button.includes('编辑意见')),reanchor=buttons.find(button=>button.includes('重新选中段落'));
   assert.ok(edit,'the saved opinion keeps an instruction editor');assert.ok(!edit.includes('disabled=""'),'missing current scene must not block instruction edits');assert.ok(reanchor?.includes('disabled=""'),'reanchoring still needs the scene in the current screenplay');
+});
+
+test('floating capture preserves inbox visibility and refuses to replace another local opinion',async()=>{const h=await ready();h.controller.capture('p','s',selection,{open:false});assert.equal(h.controller.project('p').open,false);h.controller.setComposerInstruction('p','s','保留我的意见');assert.throws(()=>h.controller.capture('p','s',{start:3,end:5,text:'她停'},{open:false}),/未保存/);assert.equal(h.controller.project('p').composers.s.instruction,'保留我的意见');});
+test('floating composer can save itself but cannot bypass a different manual editor',async()=>{let targets=[{projectIds:['p'],shared:false,composerSceneId:'s'}];const h=await ready({dialogs:()=>({anyOpen:true,editingTargets:targets})});h.controller.capture('p','s',selection,{open:false});h.controller.setComposerInstruction('p','s','保存这条');await h.controller.saveComposer('p','s',{composerSceneId:'s'});assert.equal(h.controller.project('p').composers.s,undefined);h.controller.capture('p','s',selection,{open:false});h.controller.setComposerInstruction('p','s','不能丢');targets=[...targets,{projectIds:['p'],shared:false}];await assert.rejects(h.controller.saveComposer('p','s',{composerSceneId:'s'}),/编辑窗口/);assert.equal(h.controller.project('p').composers.s.instruction,'不能丢');});
+
+test('floating positions convert viewport selection into offset plugin coordinates and respect native inset',async()=>{const mod=await import('../src/revisions/selectionGeometry.mjs').catch(()=>({}));assert.equal(typeof mod.placeSelectionPopup,'function');const root={left:136,top:64,width:720,height:620};const pos=mod.placeSelectionPopup({left:810,right:820,top:90,bottom:110},root,{width:330,height:220},48);assert.equal(pos.left,382);assert.ok(pos.top>=56);assert.ok(pos.top+220<=612);const low=mod.placeSelectionPopup({left:200,right:220,top:650,bottom:670},root,{width:330,height:220},48);assert.ok(low.top+220<=612);assert.ok(low.left>=8);});
+
+const chatModule=await import('../src/revisions/chat.mjs').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
+const chatFactory=()=>{assert.equal(typeof chatModule.createRevisionChatSender,'function');return chatModule.createRevisionChatSender;};
+test('assistant queue spans scenes and episodes, recovers old notes and excludes only live nonstale matching captures',()=>{
+  assert.equal(typeof chatModule.queuedRevisionNotes,'function');
+  const p=fixture().projects[0];p.revisionNotes.push({...note,id:'other',sceneId:'episode-two'},{...note,id:'new-version',version:2},{...note,id:'stale'},{...note,id:'imported'},{...note,id:'done',status:'applied'});
+  p.revisionBatches=[{id:'legacy',changes:[{...change,noteId:'other'}]},{id:'sent',chatInstruction:'',changes:[change,{...change,noteId:'new-version'},{...change,noteId:'stale',status:'stale'}]},{id:'copy',chatInstruction:'',readOnly:true,changes:[{...change,noteId:'imported'}]}];
+  assert.deepEqual(chatModule.queuedRevisionNotes(p).map(n=>n.id),['n','other','new-version','stale','imported']);
+  assert.equal(chatModule.assistantRevisionBatches(p).length,2);
+});
+
+test('one opinion send captures project, draft and notes, applies only its newly returned batch and preserves later additions',async()=>{
+  const held=deferred(),h=await ready({request:async(path,payload,state)=>{
+    if(path==='/revisions/generate'){await held.promise;const next=structuredClone(state),batch={id:'new-batch',chatInstruction:payload.chatInstruction,changes:[{...change,id:'new-change'}]};next.projects[0].revisionBatches.push(batch);return {state:next,batch};}
+    return {state,result:{appliedChangeIds:payload.changeIds,preEditVersionIds:[]}};
+  }}),completed=[];
+  const sender=chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:capture=>completed.push(capture)});
+  const capture={projectId:'p',notes:[structuredClone(note)],instruction:'整体意见',key:'script-key',instructionGeneration:8};
+  const sending=sender.send(capture);capture.notes[0].version=7;capture.instruction='后来';
+  assert.equal(await sender.send({...capture,notes:[note]}),null);
+  h.state().projects[0].revisionNotes.push({...note,id:'later'});h.state().workspace.activeProjectId='q';h.setModel({catalog:{mode:'host',connected:true,effective:{provider:'changed',model:'new'}}});held.resolve();await sending;
+  const requests=h.events.filter(e=>e[0]==='request');assert.equal(requests.length,2);assert.deepEqual(requests[0][2],{projectId:'p',noteIds:['n'],chatInstruction:'整体意见',modelSelection:{provider:'real',model:'actual'}});assert.deepEqual(requests[1][2],{projectId:'p',batchId:'new-batch',changeIds:['new-change']});
+  assert.equal(completed.length,1);assert.equal(completed[0].instruction,'整体意见');assert.equal(completed[0].instructionGeneration,8);assert.equal(completed[0].key,'script-key');
+  assert.deepEqual(chatModule.queuedRevisionNotes(h.state().projects[0]).map(n=>n.id),['later']);
+  chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:()=>assert.fail('reload must not clear drafts')});assert.equal(h.events.filter(e=>e[0]==='request').length,2);
+});
+
+test('generation failure retains draft and queue, while blocked write has apply-only retry',async()=>{
+  let generationFails=true,blocked=false;
+  const h=await ready({dialogs:()=>({anyOpen:blocked,editingTargets:blocked?[{projectIds:['p']}]:[]}),request:async(path,payload,state)=>{
+    if(path==='/revisions/generate'){if(generationFails)throw Error('模型离线');const next=structuredClone(state),batch={id:'new',chatInstruction:payload.chatInstruction,changes:[change]};next.projects[0].revisionBatches.push(batch);blocked=true;return {state:next,batch};}
+    const next=structuredClone(state);next.projects[0].revisionBatches.find(b=>b.id===payload.batchId).changes[0].status='applied';return {state:next,result:{appliedChangeIds:['c'],preEditVersionIds:[]}};
+  }}),completed=[],sender=chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:x=>completed.push(x)}),capture={projectId:'p',notes:[note],instruction:'',key:'k',instructionGeneration:0};
+  await assert.rejects(sender.send(capture),/离线/);assert.equal(completed.length,0);assert.equal(chatModule.queuedRevisionNotes(h.state().projects[0]).length,1);
+  generationFails=false;await assert.rejects(sender.send(capture),/编辑窗口/);assert.equal(completed.length,1);assert.equal(chatModule.queuedRevisionNotes(h.state().projects[0]).length,0);assert.match(sender.snapshot().batchErrors.new,/编辑窗口/);
+  blocked=false;await sender.retry('p','new');assert.equal(h.events.filter(e=>e[1]==='/revisions/generate').length,2);assert.equal(h.events.filter(e=>e[1]==='/revisions/apply').length,1);
+  await assert.rejects(sender.retry('p','new'),/已写入|不可用/);assert.equal(h.events.filter(e=>e[1]==='/revisions/apply').length,1);
+});
+
+test('stale generated batches retain final instruction and do not auto apply',async()=>{
+  const h=await ready({request:async(path,payload,state)=>{const next=structuredClone(state),batch={id:'stale-generated',chatInstruction:payload.chatInstruction,changes:[{...change,status:'stale'}]};next.projects[0].revisionBatches.push(batch);return {state:next,batch};}}),completed=[];
+  const sender=chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:x=>completed.push(x)});
+  await assert.rejects(sender.send({projectId:'p',notes:[note],instruction:'还要保留',key:'k'}),/原文|变化|失效/);assert.equal(completed.length,0);assert.equal(h.events.filter(e=>e[1]==='/revisions/apply').length,0);
+});
+
+test('assistant generation refuses changed note versions during author flush',async()=>{
+  const held=deferred(),h=await ready({flush:()=>held.promise});const pending=h.controller.generate('p',['n'],{chatInstruction:'整体'});h.state().projects[0].revisionNotes[0].version=2;held.resolve();await assert.rejects(pending,/意见|变化/);assert.equal(h.events.filter(e=>e[0]==='request').length,0);
+});
+
+test('saving a newly collected opinion during generation retains it without duplicate generation',async()=>{
+  const held=deferred(),h=await ready({request:async(path,payload,state)=>{if(path==='/revisions/generate')await held.promise;return {state,result:{}};}});
+  const sending=h.controller.generate('p',['n'],{chatInstruction:''});await Promise.resolve();await Promise.resolve();
+  h.controller.capture('p','s',selection,{open:false});h.controller.setComposerInstruction('p','s','生成时新增');
+  const saved=await h.controller.saveComposer('p','s');assert.ok(saved);assert.equal(h.controller.project('p').composers.s,undefined);assert.equal(h.controller.snapshot().pending.p,'generate');held.resolve();await sending;
+});
+
+test('a pending preview whose saved source changed returns to the visible queue without enabling another send',()=>{
+  const p=fixture().projects[0];p.revisionBatches[0].chatInstruction='';assert.equal(chatModule.queuedRevisionNotes(p).length,0);p.scenes[0].revision++;
+  const notes=chatModule.queuedRevisionNotes(p);assert.equal(notes.length,1);assert.match(chatModule.revisionQueueIssue(p,notes),/原文已变化/);
+});
+
+test('paragraph sender shares project reservations with ordinary assistant requests and preserves identically retyped drafts',async()=>{
+  const {assistantRequests}=await import('../src/assistant/requestGuard.mjs'),{updateDraft,completeDraft}=await import('../src/assistant/helpers.mjs');
+  const held=deferred(),h=await ready({request:async(path,payload,state)=>{if(path==='/revisions/generate'){await held.promise;const next=structuredClone(state),batch={id:'chat-held',chatInstruction:payload.chatInstruction,changes:[change]};next.projects[0].revisionBatches.push(batch);return {state:next,batch};}return {state,result:{appliedChangeIds:['c'],preEditVersionIds:[]}};}});
+  let drafts=updateDraft({},'captured',{instruction:'同一要求'});drafts=updateDraft(drafts,'other',{instruction:'另一页面'});const capture={projectId:'p',notes:[note],instruction:'同一要求',key:'captured',instructionGeneration:drafts.captured.instructionGeneration};
+  const sender=chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:c=>{drafts=completeDraft(drafts,c.key,c.instruction,c.instructionGeneration);}});
+  const normal=assistantRequests.reserve('p');assert.equal(await sender.send(capture),null);assert.equal(h.events.length,0);assistantRequests.release('p',normal);
+  const sending=sender.send(capture);assert.equal(assistantRequests.reserve('p'),null);const other=assistantRequests.reserve('q');assert.ok(other);assistantRequests.release('q',other);
+  drafts=updateDraft(drafts,'captured',{instruction:''});drafts=updateDraft(drafts,'captured',{instruction:'同一要求'});held.resolve();await sending;
+  assert.equal(drafts.captured.instruction,'同一要求');assert.equal(drafts.other.instruction,'另一页面');assert.equal(assistantRequests.busy('p'),false);
+});
+
+test('a mixed stale or unavailable batch suppresses no opinions so removing or reanchoring one cannot strand the others',()=>{
+  for(const reason of ['stale','source','version']){
+    const p=fixture().projects[0],other={...note,id:'other',sceneId:'other-scene'},otherChange={...change,id:'other-change',noteId:other.id,sceneId:other.sceneId};
+    p.scenes.push({...p.scenes[0],id:other.sceneId});p.revisionNotes.push(other);p.revisionBatches=[{id:'mixed',chatInstruction:'',changes:[{...change},otherChange]}];
+    if(reason==='stale')p.revisionBatches[0].changes[0].status='stale';
+    if(reason==='source')p.scenes[0].revision++;
+    if(reason==='version')p.revisionNotes[0].version++;
+    assert.deepEqual(chatModule.queuedRevisionNotes(p).map(note=>note.id),['n','other'],reason);
+    p.revisionNotes=p.revisionNotes.filter(note=>note.id!=='n');
+    assert.deepEqual(chatModule.queuedRevisionNotes(p).map(note=>note.id),['other'],`${reason}: removal keeps unaffected opinion sendable`);
+  }
+});
+
+test('recovered note editors make the entire pending batch visible until the author resolves their draft',()=>{
+  const p=fixture().projects[0],other={...note,id:'other',sceneId:'other-scene'};p.scenes.push({...p.scenes[0],id:other.sceneId});p.revisionNotes.push(other);p.revisionBatches=[{id:'pending',chatInstruction:'',changes:[change,{...change,id:'other-change',noteId:other.id,sceneId:other.sceneId}]}];
+  assert.equal(chatModule.queuedRevisionNotes(p).length,0);
+  const notes=chatModule.queuedRevisionNotes(p,{n:{instruction:'恢复的未保存意见'}});assert.deepEqual(notes.map(note=>note.id),['n','other']);assert.match(chatModule.revisionQueueIssue(p,notes,{n:{instruction:'恢复的未保存意见'}}),/保存或取消/);
 });

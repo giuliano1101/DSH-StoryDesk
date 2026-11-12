@@ -1,0 +1,30 @@
+.app-shell .doctor-content{padding:22px 25px;display:flex;flex-direction:column;gap:18px;font-size:13px;line-height:1.8;overflow-wrap:anywhere}
+.app-shell .doctor-intro,.app-shell .doctor-meta,.app-shell .doctor-actions small,.app-shell .doctor-footer p{color:var(--secondary);margin:0}
+.app-shell .doctor-form .form-grid{margin:0;gap:16px 20px}
+.app-shell .doctor-actions,.app-shell .doctor-footer{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-top:18px}
+.app-shell .doctor-actions .button,.app-shell .doctor-footer .button{flex-shrink:0}
+.app-shell .doctor-history-heading{padding-top:16px;border-top:1px solid var(--line)}
+.app-shell .doctor-report{border:1px solid var(--line);border-radius:9px;overflow:hidden;background:var(--surface)}
+.app-shell .doctor-report>summary{cursor:pointer;padding:14px 16px;background:var(--hover);display:flex;align-items:center;flex-wrap:wrap;gap:9px;font-size:12px}
+.app-shell .doctor-report>summary time{margin-left:auto;color:var(--secondary);font-size:11px}
+.app-shell .doctor-report-body{padding:18px;display:flex;flex-direction:column;gap:15px}
+.app-shell .doctor-report-body p{margin:0;white-space:pre-wrap}
+.app-shell .doctor-state{font-size:11px;color:var(--secondary)}
+.app-shell .doctor-state.stale{color:#ad6300}
+.app-shell .doctor-notice,.app-shell .doctor-boundaries{padding:10px 13px;background:var(--hover);border-radius:6px}
+.app-shell .doctor-boundaries ul{margin:5px 0 0;padding-left:20px}
+.app-shell .doctor-issue{padding:16px;border:1px solid var(--line);border-radius:7px}
+.app-shell .doctor-issue-heading{display:flex;flex-wrap:wrap;gap:10px;align-items:center;color:var(--secondary);font-size:11px}
+.app-shell .doctor-priority{padding:1px 7px;border-radius:4px;background:var(--hover)}
+.app-shell .doctor-priority.high{color:#ad4900}
+.app-shell .doctor-issue h3{font-size:15px;margin:9px 0}
+.app-shell .doctor-issue blockquote{white-space:pre-wrap;border-left:2px solid var(--accent);margin:7px 0 13px;padding:7px 12px;background:var(--hover)}
+.app-shell .doctor-issue p{margin:9px 0}
+.app-shell .doctor-issue .button{margin-top:8px}
+.app-shell .doctor-source{color:var(--secondary);font-size:12px}
+.app-shell .doctor-source summary{cursor:pointer}
+.app-shell .doctor-source section{margin-top:13px}
+.app-shell .doctor-source pre{white-space:pre-wrap;overflow-wrap:anywhere;margin:5px 0;font:inherit;max-height:300px;overflow:auto}
+.app-shell .doctor-footer{border-top:1px solid var(--line);padding-top:15px;margin-top:0}
+.app-shell .brief-doctor{margin:22px auto;max-width:800px;display:flex;align-items:center;gap:14px;font-size:12px;color:var(--secondary)}
+@media(max-width:600px){.app-shell .doctor-content{padding:17px}.app-shell .doctor-actions,.app-shell .doctor-footer{align-items:flex-start;flex-direction:column;gap:12px}.app-shell .doctor-report>summary time{margin-left:0;width:100%}.app-shell .doctor-report-body{padding:12px}}

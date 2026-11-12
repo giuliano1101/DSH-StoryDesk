@@ -1,6 +1,6 @@
 #!/bin/zsh
 cd "${0:A:h}"
-screenwriter_node="${SCREENWRITER_NODE:-$(command -v node)}"
+screenwriter_node="${SCREENWRITER_NODE:-/Users/yubinai/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node}"
 if [[ ! -x "$screenwriter_node" ]]; then
   screenwriter_node="$(command -v node)"
 fi

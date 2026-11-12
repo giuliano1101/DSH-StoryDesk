@@ -28,32 +28,33 @@ function recover(storage){
 }
 export function createRevisionsController({workbench,models=()=>({}),request,storage=globalThis.localStorage,dialogs=inspectAssistantDialogs}){
   let snapshot={local:recover(storage),pending:{},errors:{},receipts:{},capabilities:null,capabilityError:'',capabilityLoading:false,storageError:''},capabilityGeneration=0;
-  const listeners=new Set(),active=new Set(),completed=new Set();
+  const listeners=new Set(),active=new Map(),completed=new Set();
   let draftGeneration=Math.max(0,...Object.values(snapshot.local).flatMap(project=>[...Object.values(project.composers),...Object.values(project.editors)].map(draft=>draft.generation)));
   const emit=patch=>{snapshot={...snapshot,...patch};for(const listener of listeners)listener();};
   const project=id=>own(snapshot.local,id)||emptyProject();
   const persist=(id,change)=>{const local={...snapshot.local,[id]:{...project(id),...change}};let storageError='';try{storage?.setItem(RECOVERY_KEY,JSON.stringify(local));}catch{storageError='本机暂时无法保存意见草稿，请保留此页面并稍后重试。';}emit({local,storageError});};
-  const findProject=id=>{const p=workbench().getState()?.projects.find(p=>p.id===id);if(!p||p.status==='archived')throw new Error('此作品已归档或不可用，请先恢复作品。');return p;};
+  const findProject=id=>{const p=workbench().getState()?.projects.find(p=>p.id===id);if(!p||p.trashedAt||p.status==='archived')throw new Error('此作品已归档或不可用，请先恢复作品。');return p;};
   const findNote=(id,noteId)=>{const p=findProject(id),note=p.revisionNotes?.find(note=>note.id===noteId);if(!note)throw new Error('这条意见已不存在。');return note;};
   const capability=kind=>{if(!snapshot.capabilities?.[kind])throw new Error(snapshot.capabilityError||'正在读取批注功能，请稍后重试。');};
-  const preflight=id=>{if(dialogs().editingTargets.some(target=>target.projectIds.includes(id)))throw new Error('本作品有尚未关闭的编辑窗口。请先保存或取消手动编辑，再重试。');};
+  const preflight=(id,composerSceneId)=>{if(dialogs().editingTargets.some(target=>target.projectIds.includes(id)&&!(composerSceneId&&target.composerSceneId===composerSceneId)))throw new Error('本作品有尚未关闭的编辑窗口。请先保存或取消手动编辑，再重试。');};
   const errorMessage=error=>error.code==='NOT_FOUND'?REVISIONS_RELOAD:error.message||'暂时无法完成，请重试。';
   const run=async(id,kind,operation)=>{
-    if(active.has(id))return null;
-    active.add(id);emit({pending:{...snapshot.pending,[id]:kind},errors:{...snapshot.errors,[id]:''}});
-    try{return await operation();}catch(error){emit({errors:{...snapshot.errors,[id]:errorMessage(error)}});throw error;}finally{active.delete(id);const pending={...snapshot.pending};delete pending[id];emit({pending});}
+    const kinds=active.get(id)||new Set();
+    if(kinds.size&&!(kind==='save'&&kinds.size===1&&kinds.has('generate')))return null;
+    kinds.add(kind);active.set(id,kinds);emit({pending:{...snapshot.pending,[id]:kinds.has('generate')?'generate':kind},errors:{...snapshot.errors,[id]:''}});
+    try{return await operation();}catch(error){emit({errors:{...snapshot.errors,[id]:errorMessage(error)}});throw error;}finally{kinds.delete(kind);if(!kinds.size)active.delete(id);const pending={...snapshot.pending};if(kinds.size)pending[id]=kinds.has('generate')?'generate':[...kinds][0];else delete pending[id];emit({pending});}
   };
-  const locked=async(id,callback)=>{preflight(id);const token=workbench().acquireEditingLock({projectIds:[id],shared:false});try{await workbench().flush({adoptionToken:token});preflight(id);return await callback();}finally{workbench().releaseEditingLock(token);}};
+  const locked=async(id,callback,composerSceneId)=>{preflight(id,composerSceneId);const token=workbench().acquireEditingLock({projectIds:[id],shared:false});try{await workbench().flush({adoptionToken:token});preflight(id,composerSceneId);return await callback();}finally{workbench().releaseEditingLock(token);}};
   const accept=data=>{if(data.state)workbench().accept(data.state);return data;};
-  const mutate=(id,payload,onSaved)=>run(id,'save',async()=>{capability('notes');findProject(id);return locked(id,async()=>{const data=accept(await request('/revisions/notes',{projectId:id,...payload}));onSaved?.(data);return data;});});
+  const mutate=(id,payload,onSaved,composerSceneId)=>run(id,'save',async()=>{capability('notes');findProject(id);return locked(id,async()=>{const data=accept(await request('/revisions/notes',{projectId:id,...payload}));onSaved?.(data);return data;},composerSceneId);});
   const controller={
     snapshot:()=>snapshot,project,subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
     setView:persist,
     async refreshCapabilities(){const generation=++capabilityGeneration;emit({capabilityLoading:true});try{const data=await request('/revisions');if(generation===capabilityGeneration){if(!data.capabilities?.notes)throw new Error(REVISIONS_RELOAD);emit({capabilities:data.capabilities,capabilityError:''});}}catch(error){if(generation===capabilityGeneration)emit({capabilities:null,capabilityError:error.status===404?REVISIONS_RELOAD:errorMessage(error)});}finally{if(generation===capabilityGeneration)emit({capabilityLoading:false});}},
-    capture(id,sceneId,selection){const p=findProject(id),scene=p.scenes.find(scene=>scene.id===sceneId&&!scene.archived);if(!scene||!exactSelection(workbench().body(p,scene),selection))throw new Error('请先在正文中选中需要批注的完整段落。');const existing=own(project(id).composers,sceneId);if(existing){if(JSON.stringify(existing.selection)!==JSON.stringify(selection))throw new Error(projectFormat(p)==='novel'?'本章还有未保存的意见，请先保存或取消。':'本场还有未保存的意见，请先保存或取消。');persist(id,{open:true});return;}persist(id,{open:true,composers:{...project(id).composers,[sceneId]:{selection:clone(selection),instruction:'',generation:++draftGeneration}}});},
+    capture(id,sceneId,selection,{open=true}={}){const p=findProject(id),scene=p.scenes.find(scene=>scene.id===sceneId&&!scene.archived);if(!scene||!exactSelection(workbench().body(p,scene),selection))throw new Error('请先在正文中选中需要批注的完整段落。');const existing=own(project(id).composers,sceneId);if(existing){if(JSON.stringify(existing.selection)!==JSON.stringify(selection))throw new Error(projectFormat(p)==='novel'?'本章还有未保存的意见，请先保存或取消。':'本场还有未保存的意见，请先保存或取消。');persist(id,{open});return;}persist(id,{open,composers:{...project(id).composers,[sceneId]:{selection:clone(selection),instruction:'',generation:++draftGeneration}}});},
     setComposerInstruction(id,sceneId,instruction){const draft=own(project(id).composers,sceneId);if(draft)persist(id,{composers:{...project(id).composers,[sceneId]:{...draft,instruction,generation:++draftGeneration}}});},
     cancelComposer(id,sceneId){const composers={...project(id).composers};delete composers[sceneId];persist(id,{composers});},
-    saveComposer(id,sceneId){const draft=clone(own(project(id).composers,sceneId));if(!draft?.instruction.trim())return Promise.reject(new Error('请写下这段的修改意见。'));return mutate(id,{operation:'add',sceneId,selection:draft.selection,instruction:draft.instruction},()=>{if(own(project(id).composers,sceneId)?.generation===draft.generation)controller.cancelComposer(id,sceneId);});},
+    saveComposer(id,sceneId,options={}){const draft=clone(own(project(id).composers,sceneId));if(!draft?.instruction.trim())return Promise.reject(new Error('请写下这段的修改意见。'));return mutate(id,{operation:'add',sceneId,selection:draft.selection,instruction:draft.instruction},()=>{if(own(project(id).composers,sceneId)?.generation===draft.generation)controller.cancelComposer(id,sceneId);},options.composerSceneId===sceneId?sceneId:undefined);},
     startEdit(id,noteId){const note=findNote(id,noteId);if(note.status!=='open')throw new Error('已采用的意见仅供查看。');if(!own(project(id).editors,noteId))persist(id,{editors:{...project(id).editors,[noteId]:{instruction:note.instruction,generation:++draftGeneration}}});},
     setNoteInstruction(id,noteId,instruction){const draft=own(project(id).editors,noteId);if(draft)persist(id,{editors:{...project(id).editors,[noteId]:{instruction,generation:++draftGeneration}}});},
     cancelEdit(id,noteId){const editors={...project(id).editors};delete editors[noteId];persist(id,{editors});},
@@ -61,11 +62,13 @@ export function createRevisionsController({workbench,models=()=>({}),request,sto
     remove(id,noteId){return mutate(id,{operation:'remove',noteId},()=>{controller.cancelEdit(id,noteId);persist(id,{checkedNotes:project(id).checkedNotes.filter(note=>note!==noteId),...(project(id).reanchorId===noteId?{reanchorId:''}:{})});});},
     beginReanchor(id,noteId){const note=findNote(id,noteId);if(note.status!=='open')throw new Error('已采用的意见仅供查看。');persist(id,{reanchorId:noteId,open:false});},
     reanchor(id,noteId,sceneId,selection){const note=findNote(id,noteId),p=findProject(id),unit=creationCopy(projectFormat(p)).unit;if(note.sceneId!==sceneId)return Promise.reject(new Error(`请回到这条意见的原${unit}重新选中段落。`));const scene=p.scenes.find(scene=>scene.id===sceneId&&!scene.archived);if(!scene||!exactSelection(workbench().body(p,scene),selection))return Promise.reject(new Error(`请先在原${unit}选中当前段落。`));return mutate(id,{operation:'reanchor',noteId,selection:clone(selection)},()=>{if(project(id).reanchorId===noteId)persist(id,{reanchorId:'',open:true});});},
-    generate(id,noteIds){const capturedIds=[...noteIds],catalog=models().catalog,targetModel=catalog?.mode==='host'?clone(catalog.effective):undefined;return run(id,'generate',async()=>{
-      capability('generate');if(models().loading||models().error||!catalog?.connected||catalog.mode==='host'&&!targetModel)throw new Error(models().error||catalog?.label||'请先连接可用模型。');if(!capturedIds.length)throw new Error('请勾选需要一起处理的意见。');
+    generate(id,noteIds,options={}){const capturedIds=[...noteIds],chat=Object.hasOwn(options,'chatInstruction'),chatInstruction=options.chatInstruction,catalog=models().catalog,targetModel=catalog?.mode==='host'?clone(catalog.effective):undefined;return run(id,'generate',async()=>{
+      capability('generate');if(chat){capability('chat');if(typeof chatInstruction!=='string'||chatInstruction.length>24000)throw new Error('整体修改要求须为不超过 24000 字的文字。');}if(models().loading||models().error||!catalog?.connected||catalog.mode==='host'&&!targetModel)throw new Error(models().error||catalog?.label||'请先连接可用模型。');if(!capturedIds.length)throw new Error('请勾选需要一起处理的意见。');
       const p=findProject(id);for(const noteId of capturedIds){const note=findNote(id,noteId),scene=p.scenes.find(scene=>scene.id===note.sceneId);if(note.status!=='open'||!noteCurrent(p,note,scene?workbench().body(p,scene):''))throw new Error('勾选的意见原文已变化，请重新选中段落后生成。');if(own(project(id).editors,noteId))throw new Error('请先保存或取消正在编辑的意见，再生成。');}
+      const capturedVersions=chat?capturedIds.map(noteId=>({id:noteId,version:findNote(id,noteId).version})):[];
       preflight(id);await workbench().flush();preflight(id);
-      const data=accept(await request('/revisions/generate',{projectId:id,noteIds:capturedIds,...(targetModel?{modelSelection:targetModel}:{})}));
+      if(chat){const latest=findProject(id);for(const captured of capturedVersions){const note=findNote(id,captured.id),scene=latest.scenes.find(scene=>scene.id===note.sceneId);if(note.version!==captured.version||note.status!=='open'||!noteCurrent(latest,note,scene?workbench().body(latest,scene):'')||own(project(id).editors,note.id))throw new Error('意见或原文在保存期间发生变化，请核对后重新发送。');}}
+      const data=accept(await request('/revisions/generate',{projectId:id,noteIds:capturedIds,...(chat?{chatInstruction}:{}),...(targetModel?{modelSelection:targetModel}:{})}));
       if(data.batch)persist(id,{batchId:data.batch.id,checkedChanges:{...project(id).checkedChanges,[data.batch.id]:data.batch.changes.filter(change=>change.status==='pending').map(change=>change.id)}});return data;
     });},
     apply(id,batchId,changeIds){const capturedIds=[...changeIds];return run(id,'apply',async()=>{

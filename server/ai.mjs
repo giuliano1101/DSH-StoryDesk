@@ -1,5 +1,6 @@
 import { DomainError, getProject, getScene, object, required, text } from './domain.mjs';
 import { assistantPersona } from './assistant.mjs';
+import { isEpisodic, episodeScenes, sceneEpisodeId } from '../shared/episodes.mjs';
 import { projectFormat } from '../shared/creation.mjs';
 
 function effectiveSettings(saved) {
@@ -49,7 +50,7 @@ export function buildPrompts(state, suggestion) {
     characters: project.characters.filter(item => item.status === 'adopted'),
     materials: project.materials.filter(item => item.status === 'adopted'),
     scene: { title: scene.title, location: scene.location, time: scene.time, interior: scene.interior, summary: scene.summary, intent: scene.intent, outcome: scene.outcome, body: suggestion.sourceText },
-    sceneOutline: project.scenes.filter(item => !item.archived).map(item => ({ title: item.title, act: item.act, summary: item.summary, intent: item.intent, outcome: item.outcome })),
+    sceneOutline: (isEpisodic(project) ? episodeScenes(project, sceneEpisodeId(project, scene)) : project.scenes.filter(item => !item.archived)).map(item => ({ title: item.title, act: item.act, summary: item.summary, intent: item.intent, outcome: item.outcome })),
     selection: suggestion.selection,
   };
   if (novel) { delete context.scene.location; delete context.scene.time; delete context.scene.interior; }

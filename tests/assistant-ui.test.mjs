@@ -84,13 +84,6 @@ test('forced settings unmount invalidates a delayed import continuation before r
   old.mount();assert.equal(old.isCurrent(checkpoint),false,'a remounted lifecycle cannot revive old continuations');
 });
 
-test('assistant layout keeps a split workspace from 960px and replaces content below it',async()=>{
-  const {assistantLayout}=await import('../src/assistant/layout.mjs');
-  assert.deepEqual(assistantLayout(1120,null),{open:true,dedicated:false,hideContent:false,compactSidebar:true});
-  assert.equal(assistantLayout(960,null).dedicated,false);
-  assert.deepEqual(assistantLayout(800,true),{open:true,dedicated:true,hideContent:true,compactSidebar:true});
-  assert.equal(assistantLayout(800,false).hideContent,false);assert.equal(assistantLayout(1440,true).compactSidebar,false);
-});
 test('unavailable assistant backend cannot report a green model connection',async()=>{
   const {assistantReadiness,assistantError}=await import('../src/assistant/modelState.mjs');
   const error={status:404,message:'找不到此接口'};
@@ -193,4 +186,26 @@ test('optional new-item titles omit empty and whitespace values so the server ca
   const executor=createAssistantExecutor({workbench:()=>({acquireEditingLock:()=>1,flush:async()=>{},releaseEditingLock(){}}),liveContext:()=>({page:'library',projectId:'p'}),dialogs:()=>({anyOpen:false,editingTargets:[]}),request:async(_,payload)=>{payloads.push(payload);return {};},accept(){}});
   for(const [index,title] of ['', '  \n\t ', '作者指定标题'].entries())await executor.write({id:`optional-title-${index}`,page:'library',projectId:'p',writeTargets:[{target:'material.new',label:'新增参考资料'}]},{target:'material.new',text:'实际素材文字',title});
   assert.equal(Object.hasOwn(payloads[0],'title'),false);assert.equal(Object.hasOwn(payloads[1],'title'),false);assert.equal(payloads[2].title,'作者指定标题');
+});
+
+test('popup never opens itself or hides manuscript on resize',async()=>{const {assistantLayout}=await import('../src/assistant/layout.mjs');for(const width of [380,800,960,1440]){assert.equal(assistantLayout(width,null).open,false);assert.equal(assistantLayout(width,true).hideContent,false);assert.equal(assistantLayout(width,true).dedicated,false);}});
+test('assistant shortcut is platform-specific, guarded and composition-safe',async()=>{const {shouldSubmitAssistant}=await import('../src/assistant/layout.mjs');assert.equal(typeof shouldSubmitAssistant,'function');const base={key:'Enter',metaKey:true};assert.equal(shouldSubmitAssistant(base,true,'MacIntel'),true);for(const patch of [{isComposing:true},{keyCode:229},{repeat:true},{altKey:true},{shiftKey:true},{ctrlKey:true},{metaKey:false}])assert.equal(shouldSubmitAssistant({...base,...patch},true,'MacIntel'),false);assert.equal(shouldSubmitAssistant({key:'Enter',ctrlKey:true},true,'Win32'),true);assert.equal(shouldSubmitAssistant(base,false,'MacIntel'),false);assert.equal(shouldSubmitAssistant(base,true,'Win32'),false);});
+test('episode context isolates empty units and omits unsupported backend fields',async()=>{const series={...p,kind:'电视剧',episodes:[{id:'e1',title:'一'},{id:'e2',title:'二'}],scenes:[{...p.scenes[0],episodeId:'e1'}],view:{tab:'script',episodeId:'e2'}};const live={...state,projects:[series]};assert.deepEqual(buildContext(live,null,null,undefined,{episodes:true}),{page:'script',projectId:'p',episodeId:'e2'});assert.equal(buildContext(live,null,null,undefined,{}).episodeId,undefined);const {normalizeDrafts}=await import('../src/assistant/helpers.mjs');const valid='["script","p",null,null,null,"episode","e2"]',bad='["tasks","p",null,null,null,"episode","e2"]';assert.deepEqual(Object.keys(normalizeDrafts({[valid]:{instruction:'本集'},[bad]:{},'["script",null,null,null,null,"episode","e2"]':{}})),[valid]);});
+
+test('capability disclosure uses only server operations for actual page and mode',async()=>{const mod=await import('../src/assistant/operations.mjs').catch(()=>({}));assert.equal(typeof mod.availableOperations,'function');const catalog={script:{execute:[{type:'episode.add',title:'新增集'},{type:'scene.add',title:'添加场景'},{type:'project.trash',title:'移入废纸篓'}]}};assert.deepEqual(mod.availableOperations(catalog,{page:'script'},{kind:'电影长片'}).map(x=>x.type),['scene.add','project.trash']);assert.equal(mod.availableOperations(catalog,{page:'script',creationMode:'novel'},{format:'novel'})[0].title,'添加章节');assert.equal(mod.availableOperations(undefined,{page:'tasks'}),null);assert.deepEqual(mod.availableOperations(catalog,{page:'tasks'}),[]);});
+
+test('capability disclosure follows execution versus preview mode without inventing discussion writes',async()=>{const {availableOperations}=await import('../src/assistant/operations.mjs');const catalog={tasks:{execute:[{type:'task.upsert',title:'添加待办'}],manage:[{type:'project.update',title:'修改资料'}]}};assert.deepEqual(availableOperations(catalog,{page:'tasks'},null,'manage').map(x=>x.type),['project.update']);assert.deepEqual(availableOperations(catalog,{page:'tasks'},null,'discuss'),[]);});
+test('episode execution can navigate only while the captured episode is still current',async()=>{const {createAssistantExecutor}=await import('../src/assistant/execution.mjs');let episodeId='e1';const payloads=[];const executor=createAssistantExecutor({workbench:()=>({flush:async()=>{},acquireEditingLock:()=>1,releaseEditingLock(){}}),liveContext:()=>({page:'scenes',projectId:'p',episodeId}),dialogs:()=>({anyOpen:false,editingTargets:[]}),request:async(_,data)=>{payloads.push(data);return {};},accept(){}});await executor.apply({id:'first',page:'scenes',projectId:'p',episodeId:'e1'});assert.equal(payloads.at(-1).allowNavigation,true);episodeId='e2';await executor.apply({id:'second',page:'scenes',projectId:'p',episodeId:'e1'});assert.equal(payloads.at(-1).allowNavigation,false);});
+
+test('recovered episode identities reject foreign focus fields and invalid scene identifiers',async()=>{const {normalizeDrafts}=await import('../src/assistant/helpers.mjs');const invalid=[['script','p','',null,null,'episode','e'],['scenes','p',42,null,null,'episode','e'],['script','p','s','material','m','episode','e'],['script',' ',null,null,null,'episode','e'],['script','p',null,null,null,'episode',' ']];for(const key of invalid)assert.deepEqual(normalizeDrafts({[JSON.stringify(key)]:{instruction:'bad'}}),{});});
+
+for(const [platform,modifier] of [['MacIntel',{metaKey:true}],['Win32',{ctrlKey:true}]])test(`React ${platform} keyboard adapter keeps composing Enter inert and submits a normal event once`,async()=>{
+  const {shouldSubmitAssistant}=await import('../src/assistant/layout.mjs');
+    const synthetic={key:'Enter',keyCode:13,...modifier,nativeEvent:{key:'Enter',keyCode:13,isComposing:true}};
+    assert.equal(Object.hasOwn(synthetic,'isComposing'),false,'React exposes composition state on the native event');
+    assert.equal(shouldSubmitAssistant(synthetic,true,platform),false,platform);
+    let submits=0;
+    const normal={...synthetic,nativeEvent:{...synthetic.nativeEvent,isComposing:false}};
+    if(shouldSubmitAssistant(normal,true,platform))submits++;
+    assert.equal(submits,1,platform);
 });

@@ -5,6 +5,7 @@ import { exportDocument } from './exports.mjs';
 import { BODY_LIMIT, PROJECT_IMPORT_LIMIT } from './limits.mjs';
 import { appendAssistantTurn, applyAssistantTurn, buildAssistantPrompts, configureAssistant, getAssistant, importAssistantSkill, prepareAssistantRequest, writeAssistantReply } from './assistant.mjs';
 import { appendRevisionBatch, applyRevisions, buildRevisionPrompts, prepareRevisions, reviseNote, revisionCapabilities } from './revisions.mjs';
+import {prepareDoctor,buildDoctorPrompts,appendDoctorReport,authorizeDoctor,doctorReports,handoffDoctorIssue} from './doctor.mjs';
 
 function sendJson(res, status, value) {
   const bytes = Buffer.from(JSON.stringify(value));
@@ -51,6 +52,7 @@ function sameOrigin(req) {
 }
 export function createApi({ store, modelAdapter } = {}) {
   if (!store) throw new Error('createApi requires a store');
+  const doctorAuthority=new Map(),doctorBusy=new Set();
   return async function handleApi(req, res) {
     let url;
     try { url = new URL(req.url, 'http://localhost'); } catch { sendJson(res, 400, { error: '请求网址不正确', code: 'INVALID_URL' }); return true; }
@@ -58,13 +60,34 @@ export function createApi({ store, modelAdapter } = {}) {
     try {
       sameOrigin(req);
       const path = url.pathname;
-      const methods = { '/api/state': ['GET'], '/api/actions': ['POST'], '/api/ai': ['POST'], '/api/settings': ['GET', 'POST'], '/api/models': ['GET', 'POST'], '/api/export': ['GET'], '/api/assistant': ['GET', 'POST'], '/api/assistant/config': ['POST'], '/api/assistant/skills': ['POST'], '/api/assistant/apply': ['POST'], '/api/assistant/write': ['POST'], '/api/revisions': ['GET'], '/api/revisions/notes': ['POST'], '/api/revisions/generate': ['POST'], '/api/revisions/apply': ['POST'] };
+      const methods = { '/api/state': ['GET'], '/api/actions': ['POST'], '/api/ai': ['POST'], '/api/settings': ['GET', 'POST'], '/api/models': ['GET', 'POST'], '/api/export': ['GET'], '/api/assistant': ['GET', 'POST'], '/api/assistant/config': ['POST'], '/api/assistant/skills': ['POST'], '/api/assistant/apply': ['POST'], '/api/assistant/write': ['POST'], '/api/revisions': ['GET'], '/api/revisions/notes': ['POST'], '/api/revisions/generate': ['POST'], '/api/revisions/apply': ['POST'], '/api/doctor':['GET','POST'], '/api/doctor/handoff':['POST'] };
       if (!methods[path]) throw new DomainError('找不到此接口', 404, 'NOT_FOUND');
       if (!methods[path].includes(req.method)) { res.setHeader('allow', methods[path].join(', ')); throw new DomainError('请求方法不支持', 405, 'METHOD_NOT_ALLOWED'); }
-      if (path === '/api/state') sendJson(res, 200, { state: await store.read(), ai: await aiStatus(store, modelAdapter), capabilities: { creationFormats: ['screenplay', 'novel'] } });
+      if (path === '/api/state') sendJson(res, 200, { state: await store.read(), ai: await aiStatus(store, modelAdapter), capabilities: { creationFormats: ['screenplay', 'novel'], episodes: true, projectTrash: true } });
       else if (path === '/api/actions') { const body = await readBody(req, { allowProjectImport: true }); sendJson(res, 200, await store.dispatch(body?.action)); }
       else if (path === '/api/models') sendJson(res, 200, req.method === 'GET' ? await modelCatalog(store,modelAdapter) : await saveModelSelection(store,modelAdapter,await readBody(req)));
       else if (path === '/api/settings') sendJson(res, 200, req.method === 'GET' ? await readPublicSettings(store) : await saveSettings(store, await readBody(req)));
+      else if(path==='/api/doctor'&&req.method==='GET')sendJson(res,200,{reports:doctorReports(await store.read(),url.searchParams.get('projectId'),doctorAuthority)});
+      else if(path==='/api/doctor/handoff'){
+        const body=await readBody(req),result=await store.transaction(state=>handoffDoctorIssue(state,body,doctorAuthority));
+        sendJson(res,200,{state:result.state,...result.result});
+      }
+      else if(path==='/api/doctor'){
+        const body=await readBody(req),projectId=body?.projectId;
+        if(doctorBusy.has(projectId))throw new DomainError('此作品正在诊断，请等待本次完成。',409,'DOCTOR_BUSY');
+        doctorBusy.add(projectId);
+        const controller=new AbortController(),abort=()=>{if(!res.writableEnded)controller.abort();};res.once('close',abort);
+        const timeout=setTimeout(()=>controller.abort(),120000);timeout.unref?.();
+        try{
+          const modelSelection=await captureModelSelection(store,modelAdapter,body),state=await store.read(),prepared=prepareDoctor(state,body),prompts=buildDoctorPrompts(state,prepared);
+          const output=await callModel({store,modelAdapter,system:prompts.system,user:prompts.user,modelSelection,signal:controller.signal});
+          if(controller.signal.aborted)throw new DomainError('诊断已取消或超时，原文未改变。',504,'AI_TIMEOUT');
+          const result=await store.transaction(current=>appendDoctorReport(current,prepared,output,modelSelection,prompts.guidance));
+          authorizeDoctor(doctorAuthority,result.result);
+          const report=doctorReports(result.state,projectId,doctorAuthority).find(r=>r.id===result.result.id);
+          sendJson(res,200,{state:result.state,report});
+        }finally{clearTimeout(timeout);res.off('close',abort);doctorBusy.delete(projectId);}
+      }
       else if (path === '/api/revisions') sendJson(res, 200, { capabilities: revisionCapabilities() });
       else if (path === '/api/revisions/notes' || path === '/api/revisions/apply') {
         const body = await readBody(req);

@@ -1,11 +1,11 @@
 {
   "name": "dsh-screenwriter-desk",
-  "version": "0.5.0",
+  "version": "0.7.0",
   "private": true,
   "type": "module",
   "scripts": {
     "start": "node server/index.mjs",
-    "test": "node --test tests/domain.test.mjs tests/api.test.mjs tests/plugin.test.mjs tests/assistant.test.mjs tests/assistant-execute.test.mjs tests/assistant-ui.test.mjs tests/revisions.test.mjs tests/revisions-ui.test.mjs tests/novel.test.mjs tests/novel-ui.test.mjs",
+    "test": "node --test tests/domain.test.mjs tests/episodes.test.mjs tests/project-trash.test.mjs tests/api.test.mjs tests/plugin.test.mjs tests/assistant.test.mjs tests/assistant-execute.test.mjs tests/assistant-ui.test.mjs tests/revisions.test.mjs tests/revisions-ui.test.mjs tests/novel.test.mjs tests/novel-ui.test.mjs tests/doctor.test.mjs tests/doctor-ui.test.mjs",
     "build:plugin": "node scripts/build-plugin.mjs",
     "dev": "vite",
     "build": "vite build && node scripts/prepare-sites-build.mjs && node scripts/build-plugin.mjs",

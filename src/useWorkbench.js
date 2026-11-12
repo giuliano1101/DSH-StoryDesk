@@ -1,6 +1,7 @@
-import {createWorkspaceNavigation,createNavigationGuard} from './creationUI.mjs';
+import {createWorkspaceNavigation,createNavigationGuard,createProjectLifecycle} from './creationUI.mjs';
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {request} from './api';
+import {inspectAssistantDialogs} from './assistant/execution.mjs';
 import {createEditingGate} from './assistant/editingGate.mjs';
 
 const RECOVERY_KEY = 'screenwriter-unsaved-v1';
@@ -52,12 +53,13 @@ export function useWorkbench() {
     try {
       for (const [key,d] of entries) {
         const project=stateRef.current?.projects.find(p=>p.id===d.projectId);
+        if(project?.trashedAt)continue;
         if(!project?.scenes.some(s=>s.id===d.sceneId)) continue;
         await mutate({type:'scene.update',projectId:d.projectId,sceneId:d.sceneId,patch:{body:d.text}},options);
         if(draftRef.current[key]?.text===d.text){const next={...draftRef.current};delete next[key];persistDrafts(next);}
       }
       for(const [projectId,view] of views){
-        if(!stateRef.current?.projects.some(p=>p.id===projectId))continue;
+        if(!stateRef.current?.projects.some(p=>p.id===projectId&&!p.trashedAt))continue;
         await mutate({type:'view.save',projectId,view});
         if(pendingViews.current[projectId]===view)delete pendingViews.current[projectId];
       }
@@ -87,11 +89,13 @@ export function useWorkbench() {
     return()=>{removeEventListener('beforeunload',onClose);removeEventListener('keydown',onKey);};
   },[flush,toast]);
   const act = async (action,message) => {try{const result=await mutate(action);if(message)toast(message);return result;}catch(e){toast(e.message);throw e;}};
-  const navigation=createWorkspaceNavigation({guard:navigationGuard.current,getState:()=>stateRef.current,getCapabilities:()=>capabilitiesRef.current,flush,mutate,getView,dialogs:()=>!!document.querySelector('[role="dialog"]')});
+  const navigation=createWorkspaceNavigation({guard:navigationGuard.current,getState:()=>stateRef.current,getCapabilities:()=>capabilitiesRef.current,flush,mutate,getView,dialogs:()=>!!document.querySelector('[role="dialog"]:not([data-assistant-popup]):not([data-revision-composer]),[data-revision-composer][aria-busy="true"]')});
+  const lifecycle=createProjectLifecycle({guard:navigationGuard.current,getState:()=>stateRef.current,getCapabilities:()=>capabilitiesRef.current,flush,mutate,dialogs:inspectAssistantDialogs});
+  const trashProject=id=>{if(isProjectLocked(id))return Promise.reject(new Error('正在采用修改，请稍候。'));return lifecycle.trash(id);},restoreProject=id=>lifecycle.restore(id);
   const navigate=async work=>{try{await work();return true;}catch(e){toast(e.message);return false;}};
   const enter=()=>navigate(()=>navigation.enter()),chooseMode=format=>navigate(()=>navigation.choose(format));
-  const go=(screen,projectId,tab,sceneId)=>navigate(async()=>{if(projectId)return navigation.open(projectId,tab,sceneId);return navigationGuard.current.run(async()=>{await flush();return mutate({type:'workspace.update',patch:{screen}});});});
+  const go=(screen,projectId,tab,sceneId,episodeId)=>navigate(async()=>{if(projectId)return navigation.open(projectId,tab,sceneId,episodeId);return navigation.show(screen);});
   const body = (p,s) => draftRef.current[`${p.id}:${s.id}`]?.text ?? s.body ?? '';
   const getState=useCallback(()=>stateRef.current,[]);
-  return {navigating,isNavigating,capabilities,enter,chooseMode,isProjectLocked,isSharedLocked,acquireEditingLock,releaseEditingLock,getState,state,ai,setAi,error,notice,toast,reload,accept,mutate,act,go,drafts,body,editBody,flush,saving:saving||Object.values(pendingForms).includes('saving'),saveError:saveError||Object.values(pendingForms).includes('error'),getView,rememberView,registerFlusher,reportFormSave};
+  return {trashProject,restoreProject,navigating,isNavigating,capabilities,enter,chooseMode,isProjectLocked,isSharedLocked,acquireEditingLock,releaseEditingLock,getState,state,ai,setAi,error,notice,toast,reload,accept,mutate,act,go,drafts,body,editBody,flush,saving:saving||Object.values(pendingForms).includes('saving'),saveError:saveError||Object.values(pendingForms).includes('error'),getView,rememberView,registerFlusher,reportFormSave};
 }

@@ -1,10 +1,12 @@
 import { DomainError, clone, getProject } from './domain.mjs';
 import { PROJECT_IMPORT_LIMIT } from './limits.mjs';
 import { projectAssistantBackup } from './assistant.mjs';
+import { isEpisodic, projectEpisodes, episodeScenes, episodeLabel } from '../shared/episodes.mjs';
 import { projectFormat } from '../shared/creation.mjs';
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const visibleScenes = project => project.scenes.filter(scene => !scene.archived);
+function exportGroups(project) { return isEpisodic(project) ? projectEpisodes(project).map(episode => ({ episode, scenes: episodeScenes(project, episode.id) })) : [{ episode: null, scenes: visibleScenes(project) }]; }
 function heading(scene) { return `${scene.interior === '外景' ? 'EXT.' : 'INT.'} ${scene.location || scene.title} - ${scene.time || '日'}`; }
 function exportProject(state, projectId, versionId) {
   const project = getProject(state, projectId);
@@ -22,17 +24,21 @@ function exportProject(state, projectId, versionId) {
   return { id: project.id, ...clone(version.snapshot), format: projectFormat(project), stage: project.stage, status: project.status, pinned: false, deadline: '', tasks: [], aiHistory: [], versions: [], createdAt: version.createdAt, updatedAt: version.createdAt, exportedVersion: { id: version.id, name: version.name, createdAt: version.createdAt } };
 }
 function fountain(project) {
-  let act = '';
-  const scenes = visibleScenes(project).map((scene, index) => {
-    const section = scene.act && scene.act !== act ? `# ${scene.act}\n\n` : '';
-    act = scene.act;
-    return `${section}${heading(scene)}\n\n[[第 ${index + 1} 场 · ${scene.title}]]\n\n${scene.body}`;
+  let index = 0;
+  const scenes = exportGroups(project).flatMap(({ episode, scenes }) => {
+    let act = '';
+    return [...(episode ? [`# ${episodeLabel(project, episode.id)}\n\n${episode.summary || ''}`] : []), ...scenes.map(scene => {
+      const section = scene.act && scene.act !== act ? `${episode ? '##' : '#'} ${scene.act}\n\n` : '';
+      act = scene.act;
+      return `${section}${heading(scene)}\n\n[[第 ${++index} 场 · ${scene.title}]]\n\n${scene.body}`;
+    })];
   });
   return `Title: ${project.title.replace(/[\r\n]/g, ' ')}\nCredit: 编剧工作台导出\n${project.exportedVersion ? `Draft date: ${project.exportedVersion.name.replace(/[\r\n]/g, ' ')}\n` : ''}\n${scenes.join('\n\n\n')}\n`;
 }
 function printableHtml(project) {
   if (projectFormat(project) === 'novel') return novelHtml(project);
-  const scenes = visibleScenes(project).map((scene, index) => `<section class="scene"><h2>${escapeHtml(`${index + 1}. ${scene.title}`)}</h2><p class="slug">${escapeHtml(heading(scene))}</p><div class="prose">${escapeHtml(scene.body)}</div></section>`).join('\n');
+  let sceneIndex = 0;
+  const scenes = exportGroups(project).map(({ episode, scenes }) => `${episode ? `<h2 class="episode">${escapeHtml(episodeLabel(project, episode.id))}</h2><p>${escapeHtml(episode.summary)}</p>` : ''}${scenes.map((scene) => `<section class="scene"><h2>${escapeHtml(`${++sceneIndex}. ${scene.title}`)}</h2><p class="slug">${escapeHtml(heading(scene))}</p><div class="prose">${escapeHtml(scene.body)}</div></section>`).join('\n')}`).join('\n');
   return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>${escapeHtml(project.title)}</title><style>@page{size:A4;margin:25mm}*{box-sizing:border-box}body{margin:40px auto;max-width:760px;padding:32px;color:#181818;background:#f5f3ee;font:16px/1.9 "Songti SC","SimSun",serif}article{background:white;padding:48px;box-shadow:0 2px 20px #0001}h1{text-align:center;font-size:30px;line-height:1.5;margin:18px 0 10px}.meta{text-align:center;font-size:13px;color:#666;margin-bottom:70px}h2{font-size:18px;break-after:avoid;margin:36px 0 8px}.slug{font-weight:bold;font-family:monospace;break-after:avoid}.prose{white-space:pre-wrap;overflow-wrap:anywhere}.scene{margin-bottom:36px}@media print{body{margin:0;padding:0;max-width:none;background:white;font-size:12pt}article{padding:0;box-shadow:none}.scene{break-inside:auto}h1{margin-top:55mm}.meta{break-after:page;margin-bottom:0}h2,.slug{break-after:avoid}p{orphans:3;widows:3}}</style></head><body><article><h1>${escapeHtml(project.title)}</h1><p class="meta">${escapeHtml(project.kind)}${project.exportedVersion ? ` · ${escapeHtml(project.exportedVersion.name)}` : ''}<br>编剧工作台 · 剧本导出</p>${scenes}</article></body></html>`;
 }
 function novelText(project, markdown = false) {
@@ -60,12 +66,18 @@ async function docxBytes(project) {
     new Paragraph({ alignment: AlignmentType.CENTER, pageBreakBefore: false, spacing: { after: 1400 }, children: [new TextRun({ text: `${project.kind}${project.exportedVersion ? ` · ${project.exportedVersion.name}` : ''}`, size: 22, font: '宋体' })] }),
   ];
   const novel = projectFormat(project) === 'novel'; let group = '';
-  visibleScenes(project).forEach((scene, index) => {
+  let index = 0;
+  exportGroups(project).forEach(({ episode, scenes }) => {
+    group = '';
+    if (episode) { children.push(new Paragraph({ pageBreakBefore: true, keepNext: true, children: [new TextRun({ text: episodeLabel(project, episode.id), bold: true, size: 32, font: '宋体' })] })); if (episode.summary) children.push(new Paragraph({ children: [new TextRun({ text: episode.summary, size: 24, font: '宋体' })] })); }
+    scenes.forEach((scene) => {
     if (novel && scene.act && scene.act !== group) children.push(new Paragraph({ keepNext: true, children: [new TextRun({ text: scene.act, bold: true, size: 28, font: '宋体' })] }));
     group = scene.act;
-    children.push(new Paragraph({ pageBreakBefore: index === 0, keepNext: true, spacing: { before: 320, after: 160 }, children: [new TextRun({ text: novel ? `第${index + 1}章 ${scene.title}` : `${index + 1}. ${scene.title}`, bold: true, size: 26, font: '宋体' })] }));
+    children.push(new Paragraph({ pageBreakBefore: index === 0 && !episode, keepNext: true, spacing: { before: 320, after: 160 }, children: [new TextRun({ text: novel ? `第${index + 1}章 ${scene.title}` : `${index + 1}. ${scene.title}`, bold: true, size: 26, font: '宋体' })] }));
     if (!novel) children.push(new Paragraph({ keepNext: true, spacing: { after: 200 }, children: [new TextRun({ text: heading(scene), bold: true, size: 22, font: '宋体' })] }));
+    index += 1;
     scene.body.split(/\r?\n/).forEach(line => children.push(new Paragraph({ spacing: { after: 100, line: 340 }, children: [new TextRun({ text: line, size: 24, font: '宋体' })] })));
+    });
   });
   const document = new Document({ creator: novel ? '小说工作台' : '编剧工作台', title: project.title, sections: [{ properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } }, children }] });
   return Packer.toBuffer(document);

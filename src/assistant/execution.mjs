@@ -20,8 +20,9 @@ export function writePreview(turn){
 }
 export function isNewWriteTarget(target){return ['material.new','scene.new.summary','scene.new.body','shared.new'].includes(target);}
 export function inspectAssistantDialogs(document=globalThis.document){
-  const dialogs=[...(document?.querySelectorAll('[role="dialog"]')||[])];
+  const dialogs=[...(document?.querySelectorAll('[role="dialog"]:not([data-assistant-popup])')||[])];
   const editingTargets=dialogs.flatMap(dialog=>{
+    if(dialog.dataset?.revisionProjectId)return [{projectIds:[dialog.dataset.revisionProjectId],shared:false,composerSceneId:dialog.dataset.revisionComposer}];
     const content=dialog.closest('.workbench-content');if(!content)return [];
     const {projectId,workspacePage}=content.dataset;
     return [{projectIds:projectId?[projectId]:[],shared:workspacePage==='shared'}];
@@ -29,7 +30,7 @@ export function inspectAssistantDialogs(document=globalThis.document){
   return {anyOpen:dialogs.length>0,editingTargets};
 }
 const conflicts=(target,other)=>target.shared&&other.shared||target.projectIds.some(id=>other.projectIds.includes(id));
-const turnContext=turn=>({page:turn.page,projectId:turn.projectId,sceneId:turn.sceneId,focus:turn.focus,...(turn.creationMode==='novel'?{creationMode:'novel'}:{})});
+const turnContext=turn=>({page:turn.page,projectId:turn.projectId,sceneId:turn.sceneId,focus:turn.focus,...(turn.episodeId?{episodeId:turn.episodeId}:{}),...(turn.creationMode==='novel'?{creationMode:'novel'}:{})});
 export function createAssistantExecutor({workbench,liveContext,dialogs=inspectAssistantDialogs,request,accept,onBusy=()=>{}}){
   const active=new Set(),automatic=new Set(),completed=new Set();
   const run=async(turn,write)=>{
@@ -68,8 +69,12 @@ export function executionDestinations(turn){
     const projectId=action.projectId;
     switch(action.type){
       case 'project.create':return result?.projectId?[{page:'brief',projectId:result.projectId,label:label||'新作品'}]:[];
+      case 'project.trash':return [{page:'trash',label:label||'废纸篓'}];
+      case 'project.restore':return [{page:'brief',projectId,label:label||'已恢复作品'}];
+      case 'episode.add':case 'episode.update':return [{page:'scenes',projectId,episodeId:result?.episodeId||action.episodeId,label:label||'分集大纲'}];
+      case 'episode.reorder':return [{page:'scenes',projectId,label:label||'分集顺序'}];
       case 'project.update':return [{page:'brief',projectId,label:label||copy.tabs.brief}];
-      case 'scene.add':return result?.sceneId?[{page:'script',projectId,sceneId:result.sceneId,label:label||`新${copy.unit}`}]:[];
+      case 'scene.add':return result?.sceneId?[{page:'script',projectId,sceneId:result.sceneId,episodeId:action.episodeId||action.scene?.episodeId,label:label||`新${copy.unit}`}]:[];
       case 'scene.write':case 'scene.update':return [{page:'script',projectId,sceneId:action.sceneId,label:label||copy.unit}];
       case 'character.upsert':case 'material.upsert':{const kind=action.type==='character.upsert'?'character':'material',id=result?.id||action[kind]?.id;return id?[{page:'library',projectId,focus:{kind,id},label:label||(kind==='character'?'人物':'资料')}]:[];}
       case 'shared.import':return result?.id?[{page:'library',projectId,focus:{kind:'material',id:result.id},label:label||'导入资料'}]:[];
@@ -79,4 +84,4 @@ export function executionDestinations(turn){
   });
 }
 
-export function recoveryVersions(turn,state){return (turn.preEditVersionIds||turn.write?.preEditVersionIds||[]).map(reference=>({...reference,projectTitle:state.projects.find(project=>project.id===reference.projectId)?.title||'原作品'}));}
+export function recoveryVersions(turn,state){return (turn.preEditVersionIds||turn.write?.preEditVersionIds||[]).map(reference=>({...reference,projectTitle:state.projects.find(project=>project.id===reference.projectId)?.title||'原作品',...(state.projects.find(project=>project.id===reference.projectId)?.trashedAt?{trashed:true}:{})}));}

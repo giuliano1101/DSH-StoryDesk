@@ -55,6 +55,9 @@ export const name='dsh-screenwriter-desk';
 export default {inject:['webServer','connection'],apply(ctx){
   const ready=createStore({directory:join(process.env.DSH_HOME||join(homedir(),'.dsh'),'screenwriter-desk')}).then(store=>({store}),()=>({unavailable:true}));
   const modelAdapter=hostModel(ctx);
+  // API reservations and generated-report authority belong to this initialized
+  // plugin/store session, not to an individual HTTP request.
+  let api;
   ctx.effect(()=>ctx.webServer.register({kind:'prefix',path:'/screenwriter-desk',handler:async(req,res)=>{
     const connection=ctx.get('connection');
     const rejection=typeof connection?.requestRejection==='function'?connection.requestRejection({headers:req.headers}):403;
@@ -62,7 +65,8 @@ export default {inject:['webServer','connection'],apply(ctx){
     try{
       const initialized=await ready;
       if(!initialized.store)throw new Error('STORE_UNAVAILABLE');
-      const api=createApi({store:initialized.store,modelAdapter}),original=req.url;
+      api??=createApi({store:initialized.store,modelAdapter});
+      const original=req.url;
       req.url=req.url.replace(/^\/screenwriter-desk(?=\/|$)/,'');
       try{if(!await api(req,res)){res.writeHead(404);res.end();}}finally{req.url=original;}
     }catch{if(!res.headersSent)res.writeHead(500,{'content-type':'application/json'});res.end(JSON.stringify({error:'编剧工作台暂时无法连接'}));}

@@ -3,7 +3,10 @@ import { exampleProjects } from './examples.mjs';
 import { PROJECT_IMPORT_LIMIT } from './limits.mjs';
 import { importProjectAssistantBackup } from './assistant.mjs';
 import { importRevisionHistory } from './revisions.mjs';
+import { importDoctorHistory } from './doctor.mjs';
 import { creationCopy, projectFormat } from '../shared/creation.mjs';
+import { isEpisodic, projectEpisodes, sceneEpisodeId } from '../shared/episodes.mjs';
+import { isProjectTrashed } from '../shared/projects.mjs';
 
 export class DomainError extends Error {
   constructor(message, status = 400, code = 'VALIDATION_ERROR') { super(message); this.status = status; this.code = code; }
@@ -56,7 +59,40 @@ function projectPatch(input) {
 export function newProject(input = {}) {
   const format = has(input, 'format') ? oneOf(input.format, ['screenplay', 'novel'], '创作格式') : 'screenplay';
   const copy = creationCopy(format);
-  return { id: uid('project'), format, title: copy.projectName, kind: copy.defaultKind, stage: 'idea', status: 'active', pinned: false, deadline: '', synopsis: '', brief: brief(), characters: [], materials: [], scenes: [], tasks: [], versions: [], aiHistory: [], view: { tab: 'script', sceneId: '', cursor: 0, scrollTop: 0, inspector: 'ai' }, createdAt: now(), updatedAt: now(), ...projectPatch(input) };
+  const project = { id: uid('project'), format, title: copy.projectName, kind: copy.defaultKind, stage: 'idea', status: 'active', pinned: false, deadline: '', synopsis: '', brief: brief(), characters: [], materials: [], scenes: [], tasks: [], versions: [], aiHistory: [], view: { tab: 'script', sceneId: '', cursor: 0, scrollTop: 0, inspector: 'ai' }, createdAt: now(), updatedAt: now(), ...projectPatch(input) };
+  if (isEpisodic(project)) { project.episodes = [{ id: uid('episode'), title: '第1集', summary: '' }]; project.view.episodeId = project.episodes[0].id; }
+  return project;
+}
+function episodePatch(input) {
+  object(input, '集资料'); const patch = fields(input, ['summary'], '集梗概');
+  if (has(input, 'title')) patch.title = required(input.title, '集名称');
+  return patch;
+}
+export function ownedEpisode(project, value) {
+  const id = required(value, '集标识', 200);
+  if (!isEpisodic(project) || !projectEpisodes(project).some(episode => episode.id === id)) fail('集不属于此剧集项目');
+  return id;
+}
+function materializeEpisodes(project) {
+  if (!isEpisodic(project)) return;
+  if (!project.episodes?.length) project.episodes = clone(projectEpisodes(project));
+  for (const scene of project.scenes) if (!scene.episodeId) scene.episodeId = project.episodes[0].id;
+  const selected = project.scenes.find(scene => scene.id === project.view.sceneId);
+  if (selected) project.view.episodeId = sceneEpisodeId(project, selected);
+  else if (!project.episodes.some(episode => episode.id === project.view.episodeId)) project.view.episodeId = project.episodes[0].id;
+}
+// Persistence validates ownership, including dormant metadata, without migration.
+export function validateProjectEpisodes(project) {
+  const episodes = project.episodes;
+  if (episodes !== undefined) {
+    unique(array(episodes, '集').map(episode => { object(episode, '集'); required(episode.id, '集标识', 200); required(episode.title, '集名称'); episodePatch(episode); return episode.id; }), '集标识');
+  }
+  const owned = new Set((episodes || []).map(episode => episode.id));
+  for (const scene of project.scenes || []) if (has(scene, 'episodeId') && !owned.has(required(scene.episodeId, '场景集标识', 200))) fail('场景的集不属于此项目');
+  if (project.view && has(project.view, 'episodeId') && !owned.has(required(project.view.episodeId, '视图集标识', 200))) fail('视图的集不属于此项目');
+  const selected = project.scenes?.find(scene => scene.id === project.view?.sceneId);
+  if (isEpisodic(project) && selected && project.view?.episodeId && sceneEpisodeId(project, selected) !== project.view.episodeId) fail('视图场景与所选集不一致');
+  return project;
 }
 function referencePatch(input, keys) {
   const patch = fields(input, keys, '参考资料', 500_000);
@@ -69,6 +105,11 @@ export function newCharacter(input = {}) { return { id: uid('character'), name: 
 export function newMaterial(input = {}) { return { id: uid('material'), title: '', category: '灵感', body: '', source: '', status: 'adopted', ...materialPatch(input) }; }
 function scenePatch(input, project) {
   const patch = fields(input, ['title', 'location', 'time', 'act', 'summary', 'intent', 'outcome'], '场景资料');
+  if (has(input, 'episodeId')) {
+    const id = required(input.episodeId, '场景集标识', 200);
+    if (isEpisodic(project)) patch.episodeId = ownedEpisode(project, id);
+    else { if (!project.episodes?.some(episode => episode.id === id)) fail('场景的集不属于此项目'); patch.episodeId = id; }
+  }
   if (has(input, 'body')) patch.body = text(input.body, '正文', 1_000_000);
   if (has(input, 'interior')) patch.interior = oneOf(input.interior, ['内景', '外景'], '内外景');
   if (has(input, 'archived')) patch.archived = bool(input.archived, '场景归档');
@@ -78,7 +119,7 @@ function scenePatch(input, project) {
   }
   return patch;
 }
-export function newScene(input = {}, project) { const copy = creationCopy(projectFormat(project)); return { id: uid('scene'), title: copy.unitName, location: '', time: projectFormat(project) === 'novel' ? '' : '日', interior: '内景', act: copy.groupName, cast: [], summary: '', intent: '', outcome: '', body: '', revision: 0, archived: false, ...scenePatch(input, project) }; }
+export function newScene(input = {}, project) { const copy = creationCopy(projectFormat(project)); return { id: uid('scene'), title: copy.unitName, location: '', time: projectFormat(project) === 'novel' ? '' : '日', interior: '内景', act: copy.groupName, cast: [], summary: '', intent: '', outcome: '', body: '', revision: 0, archived: false, ...(isEpisodic(project) ? { episodeId: projectEpisodes(project).some(e => e.id === project.view?.episodeId) ? project.view.episodeId : projectEpisodes(project)[0].id } : {}), ...scenePatch(input, project) }; }
 function taskPatch(input, project) {
   object(input, '任务');
   const patch = {};
@@ -88,9 +129,9 @@ function taskPatch(input, project) {
   if (has(input, 'done')) patch.done = bool(input.done, '任务完成状态');
   return patch;
 }
-export function getProject(state, id) { const p = state.projects.find(item => item.id === id); if (!p) fail('找不到此项目', 404, 'PROJECT_NOT_FOUND'); return p; }
+export function getProject(state, id, { includeTrashed = false } = {}) { const p = state.projects.find(item => item.id === id); if (!p) fail('找不到此项目', 404, 'PROJECT_NOT_FOUND'); if (isProjectTrashed(p) && !includeTrashed) fail('项目已移入废纸篓，请先恢复项目', 409, 'PROJECT_TRASHED'); return p; }
 export function getScene(project, id) { const s = project.scenes.find(item => item.id === id); if (!s) fail('找不到此项目的场景', 404, 'SCENE_NOT_FOUND'); return s; }
-export function snapshot(project) { const { title, kind, synopsis, brief, characters, materials, scenes } = project; return clone({ format: projectFormat(project), title, kind, synopsis, brief, characters, materials, scenes }); }
+export function snapshot(project) { const { title, kind, synopsis, brief, characters, materials, scenes } = project; return clone({ format: projectFormat(project), title, kind, synopsis, brief, characters, materials, scenes, ...(project.episodes !== undefined ? { episodes: project.episodes } : {}) }); }
 export function addVersion(project, name) { const v = { id: uid('version'), name, createdAt: now(), snapshot: snapshot(project) }; project.versions.push(v); return v; }
 function importedId(input, generated, label) { return input.id === undefined ? generated : required(input.id, `${label}标识`, 200); }
 function validTimestamp(value) { if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) fail('时间格式不正确'); return new Date(value).toISOString(); }
@@ -98,17 +139,22 @@ function importSnapshot(input, ownerFormat) {
   object(input, '备份');
   if (ownerFormat && has(input, 'format') && input.format !== ownerFormat) fail('版本备份创作格式与所属项目不一致');
   const p = newProject(ownerFormat ? { ...input, format: ownerFormat } : input);
+  // Backups predating episodes stay legacy; discard only newProject defaults.
+  delete p.episodes; delete p.view.episodeId;
+  if (has(input, 'episodes')) p.episodes = array(input.episodes, '集').map(item => { object(item, '集'); return { id: required(item.id, '集标识', 200), title: required(item.title, '集名称'), summary: text(item.summary ?? '', '集梗概') }; });
+  if (p.episodes) unique(p.episodes.map(item => item.id), '集标识');
   p.brief = brief(input.brief ?? {});
   p.characters = array(input.characters ?? [], '人物').map(item => { object(item); const c = newCharacter(item); c.id = importedId(item, c.id, '人物'); return c; });
   unique(p.characters.map(c => c.id), '人物标识');
   p.materials = array(input.materials ?? [], '素材').map(item => { object(item); const m = newMaterial(item); m.id = importedId(item, m.id, '素材'); return m; });
   unique(p.materials.map(m => m.id), '素材标识');
   p.scenes = array(input.scenes ?? [], '场景').map(item => {
-    object(item); const s = newScene(item, p); s.id = importedId(item, s.id, '场景');
+    object(item); const s = newScene(item, p); if (!has(item, 'episodeId')) delete s.episodeId; s.id = importedId(item, s.id, '场景');
     if (has(item, 'revision') && (!Number.isSafeInteger(item.revision) || item.revision < 0)) fail('场景修订号不正确');
     s.revision = item.revision ?? 0; return s;
   });
   unique(p.scenes.map(s => s.id), '场景标识');
+  validateProjectEpisodes(p);
   return p;
 }
 function importProject(input) {
@@ -124,6 +170,7 @@ function importProject(input) {
   });
   unique(p.versions.map(item => item.id), '版本标识');
   importRevisionHistory(input, p);
+  importDoctorHistory(input, p);
   // Remap project ownership while preserving adoption state; every apply still
   // validates the imported source revision, body, and selection against the copy.
   // Older assistant backups predate the origin marker. Their server-created
@@ -141,6 +188,7 @@ function importProject(input) {
 }
 function saveView(p, input) {
   const patch = fields(input, ['tab', 'inspector'], '视图', 100);
+  if (has(input, 'episodeId')) { if (isEpisodic(p)) patch.episodeId = ownedEpisode(p, input.episodeId); else { const id = required(input.episodeId, '视图集标识', 200); if (!p.episodes?.some(e => e.id === id)) fail('视图的集不属于此项目'); patch.episodeId = id; } }
   if (has(input, 'sceneId')) { patch.sceneId = text(input.sceneId ?? '', '场景标识', 200); if (patch.sceneId && !p.scenes.some(s => s.id === patch.sceneId)) fail('视图场景不属于此项目'); }
   if (has(input, 'scrollTop')) { if (!Number.isFinite(input.scrollTop) || input.scrollTop < 0) fail('滚动位置不正确'); patch.scrollTop = input.scrollTop; }
   if (has(input, 'cursor')) {
@@ -152,6 +200,11 @@ function saveView(p, input) {
       if (!Number.isSafeInteger(cursor.start) || !Number.isSafeInteger(cursor.end) || cursor.start < 0 || cursor.end < cursor.start) fail('光标位置不正确');
       patch.cursor = { start: cursor.start, end: cursor.end };
     }
+  }
+  if (isEpisodic(p)) {
+    if (patch.sceneId) { const id = sceneEpisodeId(p, getScene(p, patch.sceneId)); if (patch.episodeId && patch.episodeId !== id) fail('视图场景与所选集不一致'); patch.episodeId = id; }
+    else if (patch.episodeId && p.view.sceneId && sceneEpisodeId(p, getScene(p, p.view.sceneId)) !== patch.episodeId) patch.sceneId = '';
+    materializeEpisodes(p);
   }
   Object.assign(p.view, patch);
 }
@@ -176,13 +229,17 @@ export function applyAction(state, action) {
   if (action.type === 'project.create' || action.type === 'project.import') {
     const p = action.type === 'project.import' ? importProject(action.project) : newProject(Object.fromEntries(['title', 'kind', 'deadline', 'format'].filter(key => has(action, key)).map(key => [key, action[key]])));
     if (action.type === 'project.create' && action.text !== undefined && text(action.text, '初始正文', 1_000_000)) { const s = newScene({ ...(projectFormat(p) === 'novel' ? {} : { title: '导入正文' }), body: action.text }, p); p.scenes.push(s); p.view.sceneId = s.id; }
+    if (action.type === 'project.import') {
+      const imported = clone(state); imported.projects.push(p);
+      importProjectAssistantBackup(imported, action.project.assistant, p.id, { sourceProjectId: action.project.id, legacyEpisodes: !action.project.episodes?.length });
+      if (imported.assistant) state.assistant = imported.assistant;
+    }
     state.projects.push(p); state.workspace.activeProjectId = p.id; state.workspace.openProjectIds.push(p.id); state.workspace.screen = 'project'; state.workspace.creationMode = projectFormat(p);
-    if (action.type === 'project.import') importProjectAssistantBackup(state, action.project.assistant, p.id);
     return { projectId: p.id };
   }
   if (action.type === 'workspace.update') {
     const input = object(action.patch, '工作区'); const patch = {};
-    if (has(input, 'screen')) patch.screen = oneOf(input.screen, ['entry', 'overview', 'projects', 'project', 'library', 'tasks', 'shared', 'settings'], '工作区页面');
+    if (has(input, 'screen')) patch.screen = oneOf(input.screen, ['entry', 'overview', 'projects', 'project', 'library', 'tasks', 'shared', 'trash', 'settings'], '工作区页面');
     if (has(input, 'theme')) patch.theme = oneOf(input.theme, ['light', 'dark'], '主题');
     if (has(input, 'overviewMode')) patch.overviewMode = oneOf(input.overviewMode, ['grid', 'list'], '概览模式');
     if (has(input, 'creationMode')) patch.creationMode = oneOf(input.creationMode, ['screenplay', 'novel'], '创作模式');
@@ -200,13 +257,46 @@ export function applyAction(state, action) {
     if (has(patch, 'title') && !patch.title.trim()) fail('请填写素材名称');
     Object.assign(material, patch); return { id: material.id };
   }
-  if (!['project.update', 'scene.add', 'scene.update', 'scene.reorder', 'character.upsert', 'material.upsert', 'shared.import', 'task.upsert', 'task.toggle', 'view.save', 'version.create', 'version.restore', 'ai.apply'].includes(action.type)) fail('不支持此操作', 400, 'UNKNOWN_ACTION');
+  if (['project.trash', 'project.restore'].includes(action.type)) {
+    const p = getProject(state, action.projectId, { includeTrashed: action.type === 'project.restore' });
+    if (action.type === 'project.restore') { if (!isProjectTrashed(p)) fail('项目不在废纸篓中', 409, 'PROJECT_NOT_TRASHED'); delete p.trashedAt; }
+    else { p.trashedAt = now(); state.workspace.openProjectIds = state.workspace.openProjectIds.filter(id => id !== p.id); if (state.workspace.activeProjectId === p.id) { state.workspace.activeProjectId = ''; state.workspace.screen = 'overview'; } }
+    p.updatedAt = now(); return { projectId: p.id, trashed: isProjectTrashed(p) };
+  }
+  if (!['episode.add', 'episode.update', 'episode.reorder', 'project.update', 'scene.add', 'scene.update', 'scene.reorder', 'character.upsert', 'material.upsert', 'shared.import', 'task.upsert', 'task.toggle', 'view.save', 'version.create', 'version.restore', 'ai.apply'].includes(action.type)) fail('不支持此操作', 400, 'UNKNOWN_ACTION');
   const p = getProject(state, action.projectId); let result;
   switch (action.type) {
-    case 'project.update': if (has(object(action.patch, '项目修改'), 'format')) fail('项目创作格式不可修改'); Object.assign(p, projectPatch(action.patch)); if (has(action.patch, 'brief')) p.brief = brief(action.patch.brief, p.brief); break;
-    case 'scene.add': { const s = newScene(action.scene ?? {}, p); p.scenes.push(s); if (!p.view.sceneId) p.view.sceneId = s.id; result = { sceneId: s.id }; break; }
-    case 'scene.update': { const s = getScene(p, action.sceneId); const patch = scenePatch(action.patch, p); if (has(patch, 'body') && patch.body !== s.body) s.revision += 1; Object.assign(s, patch); break; }
-    case 'scene.reorder': { const ids = array(action.sceneIds, '场景顺序'); if (ids.length !== p.scenes.length || new Set(ids).size !== ids.length || ids.some(id => !p.scenes.some(s => s.id === id))) fail('场景顺序必须完整且不可重复'); const byId = new Map(p.scenes.map(s => [s.id, s])); p.scenes = ids.map(id => byId.get(id)); break; }
+    case 'episode.add': { if (!isEpisodic(p)) fail('只有剧集项目可以管理集'); const patch = episodePatch(action.episode ?? {}); const episode = { id: uid('episode'), title: `第${projectEpisodes(p).length + 1}集`, summary: '', ...patch }; materializeEpisodes(p); p.episodes.push(episode); result = { episodeId: episode.id }; break; }
+    case 'episode.update': { const id = ownedEpisode(p, action.episodeId); const patch = episodePatch(action.patch); materializeEpisodes(p); Object.assign(p.episodes.find(episode => episode.id === id), patch); break; }
+    case 'episode.reorder': { if (!isEpisodic(p)) fail('只有剧集项目可以管理集'); const ids = array(action.episodeIds, '集顺序'), episodes = projectEpisodes(p); if (ids.length !== episodes.length || new Set(ids).size !== ids.length || ids.some(id => !episodes.some(e => e.id === id))) fail('集顺序必须完整且不可重复'); materializeEpisodes(p); const byId = new Map(p.episodes.map(e => [e.id, e])); p.episodes = ids.map(id => byId.get(id)); break; }
+    case 'project.update': {
+      const input = object(action.patch, '项目修改');
+      if (has(input, 'format')) fail('项目创作格式不可修改');
+      // Validate every field before preserving or changing the old kind's data.
+      const patch = projectPatch(input);
+      const nextBrief = has(input, 'brief') ? brief(input.brief, p.brief) : undefined;
+      if (has(input, 'kind')) materializeEpisodes(p);
+      Object.assign(p, patch);
+      if (nextBrief !== undefined) p.brief = nextBrief;
+      if (has(input, 'kind')) materializeEpisodes(p);
+      break;
+    }
+    case 'scene.add': { const s = newScene(action.scene ?? {}, p); materializeEpisodes(p); p.scenes.push(s); if (!p.view.sceneId && (!isEpisodic(p) || p.view.episodeId === s.episodeId)) p.view.sceneId = s.id; result = { sceneId: s.id }; break; }
+    case 'scene.update': { const s = getScene(p, action.sceneId); const patch = scenePatch(action.patch, p); materializeEpisodes(p); if ((has(patch, 'body') && patch.body !== s.body) || (has(patch, 'episodeId') && patch.episodeId !== s.episodeId)) s.revision += 1; Object.assign(s, patch); if (isEpisodic(p) && p.view.sceneId === s.id) p.view.episodeId = s.episodeId; break; }
+    case 'scene.reorder': {
+      const episodeId = has(action, 'episodeId') ? ownedEpisode(p, action.episodeId) : null;
+      const targets = episodeId ? p.scenes.filter(scene => sceneEpisodeId(p, scene) === episodeId) : p.scenes;
+      const ids = array(action.sceneIds, '场景顺序');
+      const byId = new Map(targets.map(scene => [scene.id, scene]));
+      if (ids.length !== targets.length || new Set(ids).size !== ids.length || ids.some(id => !byId.has(id))) fail('场景顺序必须完整且不可重复');
+      if (episodeId) {
+        materializeEpisodes(p);
+        let index = 0;
+        // Preserve every other episode's position and relative order.
+        p.scenes = p.scenes.map(scene => byId.has(scene.id) ? byId.get(ids[index++]) : scene);
+      } else p.scenes = ids.map(id => byId.get(id));
+      break;
+    }
     case 'character.upsert':
     case 'material.upsert': {
       const isCharacter = action.type === 'character.upsert'; const input = object(isCharacter ? action.character : action.material, '参考资料'); const items = isCharacter ? p.characters : p.materials; let item;
@@ -226,10 +316,14 @@ export function applyAction(state, action) {
       for (const suggestion of p.aiHistory) revisions.set(suggestion.sceneId, Math.max(revisions.get(suggestion.sceneId) ?? -1, suggestion.sourceRevision));
       const format = projectFormat(p);
       if (has(version.snapshot, 'format') && version.snapshot.format !== format) fail('版本创作格式与所属项目不一致');
-      addVersion(p, `恢复前 · ${version.name}`); Object.assign(p, clone(version.snapshot), { format });
+      const restored = importSnapshot(version.snapshot, format);
+      // Explicitly clear absent episode metadata rather than retaining current refs.
+      addVersion(p, `恢复前 · ${version.name}`); delete p.episodes; delete p.view.episodeId; Object.assign(p, snapshot(restored), { format });
+      materializeEpisodes(p);
       p.scenes.forEach(s => { s.revision = (revisions.get(s.id) ?? s.revision) + 1; });
       p.tasks.forEach(task => { if (!p.scenes.some(s => s.id === task.sceneId)) task.sceneId = ''; });
       if (!p.scenes.some(s => s.id === p.view.sceneId)) p.view.sceneId = p.scenes[0]?.id ?? '';
+      if (isEpisodic(p)) p.view.episodeId = sceneEpisodeId(p, p.scenes.find(s => s.id === p.view.sceneId));
       result = { id: addVersion(p, `已恢复 · ${version.name}`).id }; break;
     }
     case 'ai.apply': {

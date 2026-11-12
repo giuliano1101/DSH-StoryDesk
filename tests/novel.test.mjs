@@ -206,7 +206,7 @@ test('state capabilities and legacy read normalization do not write or call a mo
   const before = await readFile(join(directory, 'state.json'), 'utf8');
   let calls = 0; const app = await startServer({ directory, port: 0, modelAdapter: async () => { calls++; throw Error('no'); } }); t.after(() => app.close());
   const result = await (await fetch(`${app.url}/api/state`)).json();
-  assert.deepEqual(result.capabilities, { creationFormats: ['screenplay', 'novel'] });
+  assert.deepEqual(result.capabilities, { creationFormats: ['screenplay', 'novel'], episodes: true, projectTrash: true });
   assert.equal(Object.hasOwn(result.state.projects[0], 'format'), false);
   assert.equal(await readFile(join(directory, 'state.json'), 'utf8'), before);
   assert.equal(calls, 0); assert.equal((await store.read()).projects.length, 1);

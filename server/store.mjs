@@ -2,7 +2,7 @@ import { mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
-import { applyAction, clone, createInitialState } from './domain.mjs';
+import { applyAction, clone, createInitialState, validateProjectEpisodes } from './domain.mjs';
 
 const queues = new Map();
 const packageDirectory = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -34,6 +34,7 @@ async function readJson(path, fallback) {
 }
 function validateState(state) {
   if (!state || state.schemaVersion !== 1 || !Number.isSafeInteger(state.revision) || !Array.isArray(state.projects) || !Array.isArray(state.sharedMaterials) || !state.workspace) throw new Error('剧本数据格式不正确。请保留数据文件并从备份恢复。');
+  for (const project of state.projects) { validateProjectEpisodes(project); for (const version of project.versions || []) validateProjectEpisodes(version.snapshot); }
   return state;
 }
 export async function createStore({ directory = process.env.SCREENWRITER_DATA_DIR || join(packageDirectory, '.data'), seed = true } = {}) {
@@ -56,6 +57,7 @@ export async function createStore({ directory = process.env.SCREENWRITER_DATA_DI
         const state = validateState(await readJson(statePath));
         const result = await mutator(state);
         state.revision += 1;
+        validateState(state);
         await atomicWrite(statePath, state);
         return { state: clone(state), ...(result === undefined ? {} : { result: clone(result) }) };
       });

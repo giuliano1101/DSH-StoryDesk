@@ -36,7 +36,7 @@ test('offline notes preserve exact prose, support CRUD and reopen, and capabilit
   let calls = 0;
   const f = await fixture(t, async () => { calls++; throw Error('offline'); });
   const saved = await readFile(join(f.directory, 'state.json'), 'utf8');
-  assert.deepEqual((await f.request('/api/revisions')).capabilities, { notes: true, generate: true, apply: true });
+  assert.deepEqual((await f.request('/api/revisions')).capabilities, { notes: true, generate: true, apply: true, chat: true });
   assert.equal(await readFile(join(f.directory, 'state.json'), 'utf8'), saved);
   const added = await f.note('雨停了。');
   assert.equal(added.status, 200, added.error);
@@ -263,7 +263,7 @@ test('archived projects and scenes refuse note writes, generation and adoption w
     await f.action(archive === 'project' ? { type: 'project.update', projectId: f.a, patch: { status: 'archived' } } : { type: 'scene.update', projectId: f.a, sceneId: f.s, patch: { archived: true } });
     const before = await f.state();
     assert.ok((await f.note('雨停了。')).status >= 400);
-    for (const operation of ['update', 'remove', 'reanchor']) assert.ok((await f.request('/api/revisions/notes', { projectId: f.a, operation, noteId: n.id, ...(operation === 'update' ? { instruction: '改' } : operation === 'reanchor' ? { selection: selection('雨停了。') } : {}) })).status >= 400);
+    for (const operation of archive === 'project' ? ['update', 'remove', 'reanchor'] : ['update', 'reanchor']) assert.ok((await f.request('/api/revisions/notes', { projectId: f.a, operation, noteId: n.id, ...(operation === 'update' ? { instruction: '改' } : operation === 'reanchor' ? { selection: selection('雨停了。') } : {}) })).status >= 400);
     assert.ok((await f.generate([n.id])).status >= 400);
     assert.ok((await f.apply(batch)).status >= 400);
     assert.deepEqual(await f.state(), before);
@@ -425,4 +425,78 @@ test('maximum-length host provider and model identifiers survive saved batch ful
   const copy = project(imported.state, imported.result.projectId);
   assert.equal(copy.revisionBatches[0].model, generated.batch.model);
   assert.equal(copy.revisionBatches[0].readOnly, true);
+});
+
+test('assistant paragraph requests preserve optional overall instructions in prompt, batch and inert imports', async t => {
+  let prompt;
+  const f = await fixture(t, async input => { prompt = JSON.parse(input.user); return defaultAdapter(input); });
+  const n = (await f.note('雨停了。')).note;
+  for (const chatInstruction of ['', '  统一压低情绪，保留停顿。\n']) {
+    const generated = await f.generate([n.id], { chatInstruction });
+    assert.equal(generated.status, 200, generated.error);
+    assert.equal(generated.batch.chatInstruction, chatInstruction);
+    assert.equal(prompt.chatInstruction, chatInstruction);
+  }
+  const legacy = await f.generate([n.id]);
+  assert.equal(Object.hasOwn(legacy.batch, 'chatInstruction'), false);
+  assert.equal(Object.hasOwn(prompt, 'chatInstruction'), false);
+  const backup = structuredClone(project(await f.state(), f.a));
+  const imported = await f.action({ type: 'project.import', project: backup });
+  const copy = project(imported.state, imported.result.projectId);
+  assert.equal(copy.revisionBatches[0].chatInstruction, '');
+  assert.equal(copy.revisionBatches[1].chatInstruction, '  统一压低情绪，保留停顿。\n');
+  assert.equal(copy.revisionBatches[0].readOnly, true);
+  for (const chatInstruction of [null, 4, {}, '长'.repeat(24001)]) {
+    const before = await f.state();
+    assert.equal((await f.generate([n.id], { chatInstruction })).status, 400);
+    const invalid = structuredClone(backup); invalid.revisionBatches[0].chatInstruction = chatInstruction;
+    assert.equal((await f.action({ type: 'project.import', project: invalid })).status, 400);
+    assert.deepEqual(await f.state(), before);
+  }
+});
+
+test('removing an archived-scene opinion unblocks the remaining queue without modifying archived prose or history', async t => {
+  const { queuedRevisionNotes, revisionQueueIssue } = await import('../src/revisions/chat.mjs');
+  const f = await fixture(t);
+  const archivedNote = (await f.note('雨停了。')).note;
+  const currentNote = (await f.note('', { sceneId: f.s2, selection: { start: 0, end: 4, text: '门开了。' } })).note;
+  const batch = (await f.generate([archivedNote.id])).batch;
+  await f.action({ type: 'scene.update', projectId: f.a, sceneId: f.s, patch: { archived: true } });
+  const before = project(await f.state(), f.a);
+  assert.match(revisionQueueIssue(before, queuedRevisionNotes(before)), /原文已变化/);
+  const removed = await f.request('/api/revisions/notes', { projectId: f.a, operation: 'remove', noteId: archivedNote.id });
+  assert.equal(removed.status, 200, removed.error);
+  const after = project(removed.state, f.a);
+  assert.deepEqual(after.scenes, before.scenes);
+  assert.deepEqual(after.versions, before.versions);
+  assert.equal(after.revisionBatches.find(item => item.id === batch.id).changes[0].status, 'stale');
+  assert.equal(after.revisionBatches[0].changes[0].instruction, archivedNote.instruction);
+  const queued = queuedRevisionNotes(after);
+  assert.deepEqual(queued.map(note => note.id), [currentNote.id]);
+  assert.equal(revisionQueueIssue(after, queued), '');
+  assert.equal((await f.generate(queued.map(note => note.id), { chatInstruction: '' })).status, 200);
+});
+
+test('mixed stale assistant batches recover all remaining opinions after explicit removal or reanchor and fresh send', async t => {
+  const { queuedRevisionNotes, revisionQueueIssue } = await import('../src/revisions/chat.mjs');
+  for (const recovery of ['remove', 'reanchor']) {
+    const started=deferred(),finish=deferred();
+    const f=await fixture(t,async input=>{started.resolve();await finish.promise;return defaultAdapter(input);});
+    const a=(await f.note('雨停了。')).note;
+    const b=(await f.note('',{sceneId:f.s2,selection:{start:0,end:4,text:'门开了。'}})).note;
+    const generating=f.generate([a.id,b.id],{chatInstruction:'统一修改'});await started.promise;
+    await f.action({type:'scene.update',projectId:f.a,sceneId:f.s,patch:{body:body+'作者新加结尾'}});finish.resolve();
+    const generated=await generating,mixed=generated.batch;
+    assert.deepEqual(mixed.changes.map(change=>change.status),['stale','pending']);
+    let p=project(generated.state,f.a),queued=queuedRevisionNotes(p);
+    assert.deepEqual(queued.map(note=>note.id),[a.id,b.id]);assert.match(revisionQueueIssue(p,queued),/原文已变化/);
+    const recovered=await f.request('/api/revisions/notes',{projectId:f.a,operation:recovery,noteId:a.id,...(recovery==='reanchor'?{selection:selection('雨停了。',body+'作者新加结尾')}:{})});
+    assert.equal(recovered.status,200,recovered.error);p=project(recovered.state,f.a);queued=queuedRevisionNotes(p);
+    assert.deepEqual(queued.map(note=>note.id),recovery==='remove'?[b.id]:[a.id,b.id]);assert.equal(revisionQueueIssue(p,queued),'');
+    const fresh=await f.generate(queued.map(note=>note.id),{chatInstruction:'重新核对后发送'});assert.equal(fresh.status,200,fresh.error);
+    const applied=await f.apply(fresh.batch);assert.equal(applied.status,200,applied.error);
+    const after=project(applied.state,f.a);assert.equal(after.scenes[0].body,recovery==='remove'?body+'作者新加结尾':body.replace('雨停了。','改写：雨停了。')+'作者新加结尾');
+    assert.equal(after.scenes[1].body,'改写：门开了。她没有回头。');assert.equal(queuedRevisionNotes(after).length,0);
+    assert.equal(after.revisionBatches.find(batch=>batch.id===mixed.id).changes[0].status,'stale');
+  }
 });
