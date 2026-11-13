@@ -5,7 +5,7 @@ import { exportDocument } from './exports.mjs';
 import { BODY_LIMIT, PROJECT_IMPORT_LIMIT } from './limits.mjs';
 import { appendAssistantTurn, applyAssistantTurn, buildAssistantPrompts, configureAssistant, getAssistant, importAssistantSkill, prepareAssistantRequest, writeAssistantReply } from './assistant.mjs';
 import { appendRevisionBatch, applyRevisions, buildRevisionPrompts, prepareRevisions, reviseNote, revisionCapabilities } from './revisions.mjs';
-import {prepareDoctor,buildDoctorPrompts,appendDoctorReport,authorizeDoctor,doctorReports,handoffDoctorIssue} from './doctor.mjs';
+import {prepareDoctor,buildDoctorPrompts,appendDoctorReport,authorizeDoctor,doctorReports,handoffDoctorIssue,currentDoctorBible,assertDoctorOpinionsCurrent} from './doctor.mjs';
 
 function sendJson(res, status, value) {
   const bytes = Buffer.from(JSON.stringify(value));
@@ -67,7 +67,7 @@ export function createApi({ store, modelAdapter } = {}) {
       else if (path === '/api/actions') { const body = await readBody(req, { allowProjectImport: true }); sendJson(res, 200, await store.dispatch(body?.action)); }
       else if (path === '/api/models') sendJson(res, 200, req.method === 'GET' ? await modelCatalog(store,modelAdapter) : await saveModelSelection(store,modelAdapter,await readBody(req)));
       else if (path === '/api/settings') sendJson(res, 200, req.method === 'GET' ? await readPublicSettings(store) : await saveSettings(store, await readBody(req)));
-      else if(path==='/api/doctor'&&req.method==='GET')sendJson(res,200,{reports:doctorReports(await store.read(),url.searchParams.get('projectId'),doctorAuthority)});
+      else if(path==='/api/doctor'&&req.method==='GET'){const state=await store.read(),id=url.searchParams.get('projectId');sendJson(res,200,{reports:doctorReports(state,id,doctorAuthority),bible:currentDoctorBible(state,id),capabilities:{storyBible:true,continuity:true,craftChecks:true}});}
       else if(path==='/api/doctor/handoff'){
         const body=await readBody(req),result=await store.transaction(state=>handoffDoctorIssue(state,body,doctorAuthority));
         sendJson(res,200,{state:result.state,...result.result});
@@ -85,14 +85,17 @@ export function createApi({ store, modelAdapter } = {}) {
           const result=await store.transaction(current=>appendDoctorReport(current,prepared,output,modelSelection,prompts.guidance));
           authorizeDoctor(doctorAuthority,result.result);
           const report=doctorReports(result.state,projectId,doctorAuthority).find(r=>r.id===result.result.id);
-          sendJson(res,200,{state:result.state,report});
+          sendJson(res,200,{state:result.state,report,bible:report.bibleDocument,capabilities:{storyBible:true,continuity:true,craftChecks:true}});
         }finally{clearTimeout(timeout);res.off('close',abort);doctorBusy.delete(projectId);}
       }
       else if (path === '/api/revisions') sendJson(res, 200, { capabilities: revisionCapabilities() });
       else if (path === '/api/revisions/notes' || path === '/api/revisions/apply') {
         const body = await readBody(req);
         const applied = path.endsWith('/apply');
-        const result = await store.transaction(state => (applied ? applyRevisions : reviseNote)(state, body));
+        const result = await store.transaction(state => {
+          if(applied&&Array.isArray(body.changeIds)){const p=state.projects.find(p=>p.id===body.projectId),batch=p?.revisionBatches?.find(b=>b.id===body.batchId);if(batch)assertDoctorOpinionsCurrent(state,body.projectId,batch.changes.filter(c=>body.changeIds.includes(c.id)).map(c=>c.noteId));}
+          return (applied ? applyRevisions : reviseNote)(state, body);
+        });
         sendJson(res, 200, { state: result.state, ...(applied ? { result: result.result } : result.result) });
       }
       else if (path === '/api/revisions/generate') {
@@ -101,6 +104,7 @@ export function createApi({ store, modelAdapter } = {}) {
         const modelSelection = await captureModelSelection(store, modelAdapter, body);
         const state = await store.read();
         const prepared = prepareRevisions(state, body);
+        assertDoctorOpinionsCurrent(state,prepared.projectId,prepared.notes.map(n=>n.id));
         const prompts = buildRevisionPrompts(state, prepared);
         const controller = new AbortController();
         const abort = () => { if (!res.writableEnded) controller.abort(); };
@@ -109,7 +113,7 @@ export function createApi({ store, modelAdapter } = {}) {
         timeout.unref?.();
         try {
           const output = await callModel({ store, modelAdapter, ...prompts, modelSelection, signal: controller.signal });
-          const result = await store.transaction(current => appendRevisionBatch(current, prepared, output, modelSelection));
+          const result = await store.transaction(current => {assertDoctorOpinionsCurrent(current,prepared.projectId,prepared.notes.map(n=>n.id));return appendRevisionBatch(current, prepared, output, modelSelection);});
           sendJson(res, 200, { state: result.state, batch: result.result });
         } finally { clearTimeout(timeout); res.off('close', abort); }
       }

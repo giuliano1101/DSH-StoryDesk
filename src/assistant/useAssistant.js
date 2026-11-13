@@ -34,14 +34,16 @@ export function useAssistant(w,focus,selection){
     if(!sendReady||!draft.instruction.trim()||pendingRef.current.has(key)||invalidRewrite)return;
     const sent=draft.instruction,sentGeneration=draft.instructionGeneration??0,targetKey=key,targetContext=structuredClone(context),targetModel=models.catalog?.mode==='host'?structuredClone(models.catalog.effective):undefined,mode=draft.mode,targetScope=scope;
     const requestToken=assistantRequests.reserve(requestProject);if(!requestToken)return;
-    pendingRef.current.add(targetKey);setPending(x=>({...x,[targetKey]:{instruction:sent,mode,startedAt:Date.now()}}));setErrors(x=>({...x,[targetKey]:''}));
+    pendingRef.current.add(targetKey);setPending(x=>({...x,[targetKey]:{instruction:sent,mode,phase:'preparing',startedAt:Date.now()}}));setErrors(x=>({...x,[targetKey]:''}));
+    const progress=patch=>setPending(x=>({...x,[targetKey]:{...x[targetKey],...patch}}));
     try{
       await wRef.current.flush();
       const state=wRef.current.getState(),p=state.projects.find(p=>p.id===targetContext.projectId),s=p?.scenes.find(s=>s.id===targetContext.sceneId);
       if(targetContext.selection&&!validSelection(s?wRef.current.body(p,s):'',targetContext.selection))throw new Error('选中段落已修改，请重新选择后发送。');
+      progress({phase:'thinking'});
       const gen=++generation.current,data=await request('/assistant',{context:targetContext,mode,instruction:sent,...(targetModel?{modelSelection:targetModel}:{}),...(mode==='rewrite'||mode==='execute'&&targetContext.page==='script'?{scope:targetScope}:{})});
       accept(data,gen);setDrafts(current=>completeDraft(current,targetKey,sent,sentGeneration));
-      if(mode==='execute'&&data.turn?.actions?.length){try{const applied=await executor.current.autoApply(data.turn);if(applied)wRef.current.toast(executionStatus(applied.turn));}catch(e){rememberError(data.turn,e);wRef.current.toast('执行尚未完成，请查看回复中的原因。');}}
+      if(mode==='execute'&&data.turn?.actions?.length){progress({phase:'writing',turnId:data.turn.id});try{const applied=await executor.current.autoApply(data.turn);if(applied)wRef.current.toast(executionStatus(applied.turn));}catch(e){rememberError(data.turn,e);wRef.current.toast('执行尚未完成，请查看回复中的原因。');}}
       else wRef.current.toast(mode==='execute'?'助手未执行操作，请查看回复':`${p?'《'+p.title+'》的':'当前页面的'}助手回复已就绪`);
     }catch(e){setErrors(x=>({...x,[targetKey]:assistantError(e)}));if(e.code==='MODEL_UNAVAILABLE')models.refresh();}finally{assistantRequests.release(requestProject,requestToken);pendingRef.current.delete(targetKey);setPending(x=>{const next={...x};delete next[targetKey];return next;});}
   };
@@ -59,5 +61,6 @@ export function useAssistant(w,focus,selection){
     try{if(!capabilities.write)throw new Error(capabilities.message);const data=await executor.current.write(turn,preview);if(data)wRef.current.toast(`已写入 · ${data.destination?.label||'页面内容'}`);return data;}catch(e){rememberError(turn,e);throw e;}
   };
   const completeInstruction=useCallback(capture=>setDrafts(current=>completeDraft(current,capture.key,capture.instruction,capture.instructionGeneration??0)),[]);
-  return {models,readiness,capabilities,sendReady,projectBusy,completeInstruction,assistant:snapshot?.assistant,loadError,refresh,context,key,roleId,draft,scope,change,invalidRewrite,bodyRangeHint,submit,pending:own(pending,key),pendingCount:Object.keys(pending).length,error:own(errors,key),turnErrors,apply,write,applying,saveConfig,importSkill};
+  const clearError=()=>setErrors(current=>({...current,[key]:''}));
+  return {models,readiness,capabilities,sendReady,projectBusy,completeInstruction,clearError,assistant:snapshot?.assistant,loadError,refresh,context,key,roleId,draft,scope,change,invalidRewrite,bodyRangeHint,submit,pending:own(pending,key),pendingCount:Object.keys(pending).length,error:own(errors,key),turnErrors,apply,write,applying,saveConfig,importSkill};
 }

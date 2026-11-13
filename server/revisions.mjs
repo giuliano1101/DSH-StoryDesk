@@ -232,4 +232,5 @@ export function importRevisionHistory(input, p) {
     });
     return { id: uid('revision_batch'), createdAt: timestamp(batch.createdAt), model: text(batch.model, '模型名称', MODEL_LABEL_LIMIT), changes, preEditVersionIds, readOnly: true, ...(own(batch, 'chatInstruction') ? { chatInstruction: text(batch.chatInstruction, '整体修改要求', 24_000) } : {}) };
   });
+  return {noteIds};
 }

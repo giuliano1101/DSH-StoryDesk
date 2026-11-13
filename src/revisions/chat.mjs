@@ -34,7 +34,7 @@ export function createRevisionChatSender({controller,getProject,completeDraft,gu
     const token=guard.reserve(projectId);if(!token)return null;
     emit({pending:{...snapshot.pending,[projectId]:pending},errors:{...snapshot.errors,[projectId]:''}});
     let batchId=pending.batchId;
-    try{return await operation(id=>{batchId=id;});}
+    try{return await operation(id=>{batchId=id;},()=>emit({pending:{...snapshot.pending,[projectId]:{...snapshot.pending[projectId],phase:'writing',batchId}}}));}
     catch(error){emit({errors:{...snapshot.errors,[projectId]:error.message},...(batchId?{batchErrors:{...snapshot.batchErrors,[batchId]:error.message}}:{})});throw error;}
     finally{guard.release(projectId,token);const next={...snapshot.pending};delete next[projectId];emit({pending:next});}
   };
@@ -42,17 +42,17 @@ export function createRevisionChatSender({controller,getProject,completeDraft,gu
     snapshot:()=>snapshot,subscribe(listener){listeners.add(listener);return()=>listeners.delete(listener);},
     send(input){
       const capture=structuredClone(input),{projectId,notes,instruction}=capture;
-      return run(projectId,{instruction,notes,startedAt:new Date().toISOString()},async recordBatch=>{
+      return run(projectId,{instruction,notes,phase:'thinking',mode:'rewrite',startedAt:new Date().toISOString()},async(recordBatch,writing)=>{
         const data=await controller.generate(projectId,notes.map(note=>note.id),{chatInstruction:instruction});
         if(!data)fail('本作品正在处理其他意见，请稍后发送。');
         const batch=data.batch;if(!batch||!Object.hasOwn(batch,'chatInstruction'))fail('完整退出并重新打开 Harness 后加载新版段落协作功能。');
         recordBatch(batch.id);
         if(batch.readOnly||batch.changes.length!==notes.length||notes.some(note=>!batch.changes.some(change=>change.noteId===note.id&&change.noteVersion===note.version&&change.status==='pending')))fail('原文或意见在生成期间发生变化，修改已保留但尚未写入。请重新定位或移除失效意见。');
         completeDraft(capture);
-        return {batch,result:await apply(projectId,batch)};
+        writing();return {batch,result:await apply(projectId,batch)};
       });
     },
-    retry(projectId,batchId){return run(projectId,{batchId},async()=>{
+    retry(projectId,batchId){return run(projectId,{batchId,phase:'writing',startedAt:new Date().toISOString()},async()=>{
       const batch=assistantRevisionBatches(getProject(projectId)).find(batch=>batch.id===batchId);
       if(!batch)fail('这条修改记录已不存在。');
       const result=await apply(projectId,batch);emit({batchErrors:{...snapshot.batchErrors,[batchId]:''}});return result;

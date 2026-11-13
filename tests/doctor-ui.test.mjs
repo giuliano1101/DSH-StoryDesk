@@ -56,3 +56,18 @@ test('stale server handoff denial updates report status and retains source and d
  f.c.open('a',{sceneId:'s'});await f.c.diagnose('a');await assert.rejects(f.c.handoff('a','r','i'),/依据已变化/);
  assert.equal(f.c.snapshot().reports.a[0].status,'stale');assert.equal(f.c.snapshot().reports.a[0].summary,'原报告');assert.equal(f.c.snapshot().reports.a[0].issues[0].noteId,undefined);
 });
+
+test('story bible is project scoped and an old backend cannot silently run a consistency diagnosis',async()=>{
+ const f=await fixture();f.c.open('a',{sceneId:'s'});f.c.change('a',{mode:'continuity'});
+ await assert.rejects(f.c.diagnose('a'),/一致性|故事档案|完整退出/);assert.equal(f.calls.length,0);
+ const bible={fingerprint:'saved',markdown:'# 故事档案',coverage:{outlineScenes:1}},g=await fixture({request:async(path,payload)=>payload?{report:{id:'fresh',projectId:'a',issues:[]},bible:{...bible,fingerprint:'captured'},capabilities:{storyBible:true,continuity:true}}:{reports:[],bible,capabilities:{storyBible:true,continuity:true}}});
+ g.c.open('a',{sceneId:'s'});await g.c.refresh('a');assert.equal(g.c.snapshot().bibles.a.markdown,bible.markdown);assert.equal(g.c.snapshot().bibles.b,undefined);
+ g.c.change('a',{mode:'continuity'});await g.c.diagnose('a');assert.equal(g.c.snapshot().bibles.a.fingerprint,'captured');
+});
+
+for(const mode of ['motivation','foreshadow','suspense'])test(`${mode} requires backend capability and captures its selected options once`,async()=>{
+ const f=await fixture();let flushes=0;f.w.flush=async()=>{flushes++;};f.c.open('a',{sceneId:'s'});f.c.change('a',{mode});
+ await assert.rejects(f.c.diagnose('a'),/完整退出.*专项检查/);assert.equal(f.calls.length,0);assert.equal(flushes,0);
+ const sent=[];const g=await fixture({request:async(path,payload)=>{sent.push({path,payload});return payload?{report:{id:'new',projectId:'a',issues:[]}}:{reports:[],capabilities:{storyBible:true,continuity:true,craftChecks:true}};}});
+ g.c.open('a',{sceneId:'s'});await g.c.refresh('a');g.c.change('a',{mode});await g.c.diagnose('a');assert.equal(sent[1].payload.mode,mode);
+});

@@ -169,8 +169,8 @@ function importProject(input) {
     return { id: importedId(item, uid('version'), '版本'), name: item.name, createdAt: validTimestamp(item.createdAt), snapshot: snapshot(importSnapshot(item.snapshot, projectFormat(p))) };
   });
   unique(p.versions.map(item => item.id), '版本标识');
-  importRevisionHistory(input, p);
-  importDoctorHistory(input, p);
+  const revisionImport=importRevisionHistory(input, p);
+  importDoctorHistory(input, p,revisionImport?.noteIds);
   // Remap project ownership while preserving adoption state; every apply still
   // validates the imported source revision, body, and selection against the copy.
   // Older assistant backups predate the origin marker. Their server-created

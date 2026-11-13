@@ -160,6 +160,19 @@ test('floating positions convert viewport selection into offset plugin coordinat
 
 const chatModule=await import('../src/revisions/chat.mjs').catch(error=>{if(error.code==='ERR_MODULE_NOT_FOUND')return {};throw error;});
 const chatFactory=()=>{assert.equal(typeof chatModule.createRevisionChatSender,'function');return chatModule.createRevisionChatSender;};
+test('paragraph activity enters writing only for the returned batch and keeps its original start time until saved',async()=>{
+  const generation=deferred(),writing=deferred(),entered=deferred();
+  const h=await ready({request:async(path,payload,state)=>{
+    if(path==='/revisions/generate'){await generation.promise;const next=structuredClone(state),batch={id:'activity-batch',chatInstruction:payload.chatInstruction,changes:[{...change,id:'activity-change'}]};next.projects[0].revisionBatches.push(batch);return {state:next,batch};}
+    entered.resolve();await writing.promise;return {state,result:{appliedChangeIds:payload.changeIds,preEditVersionIds:[]}};
+  }}),sender=chatFactory()({controller:h.controller,getProject:id=>h.state().projects.find(p=>p.id===id),completeDraft:()=>{}});
+  const sending=sender.send({projectId:'p',notes:[note],instruction:'统一修改',key:'k'}),startedAt=sender.snapshot().pending.p.startedAt;
+  assert.equal(sender.snapshot().pending.p.phase,'thinking');assert.equal(h.events.filter(e=>e[1]==='/revisions/apply').length,0);
+  generation.resolve();await entered.promise;
+  assert.equal(sender.snapshot().pending.p.phase,'writing');assert.equal(sender.snapshot().pending.p.batchId,'activity-batch');assert.equal(sender.snapshot().pending.p.startedAt,startedAt);
+  assert.equal(await sender.send({projectId:'p',notes:[note]}),null,'status changes must not unlock duplicate requests');
+  writing.resolve();await sending;assert.equal(sender.snapshot().pending.p,undefined);
+});
 test('assistant queue spans scenes and episodes, recovers old notes and excludes only live nonstale matching captures',()=>{
   assert.equal(typeof chatModule.queuedRevisionNotes,'function');
   const p=fixture().projects[0];p.revisionNotes.push({...note,id:'other',sceneId:'episode-two'},{...note,id:'new-version',version:2},{...note,id:'stale'},{...note,id:'imported'},{...note,id:'done',status:'applied'});
