@@ -4,7 +4,7 @@ Thank you for helping authors finish stories. 中文、English、日本語 issue
 
 ## Local development
 
-Node >=20; use the pinned pnpm version in package.json. Clone this repository, then:
+For development and packaging, use Node >=22.13 with the pinned pnpm version in package.json. The plugin runtime declares Node >=20; CI installs tools on Node 22, then tests the application separately on Node 20 and 22. Clone this repository, then:
 
 ```sh
 corepack enable

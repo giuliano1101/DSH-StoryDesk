@@ -222,14 +222,17 @@ test('paragraph attachments enable empty-instruction send and replace range mode
   assert.match(html,/统一克制/);assert.match(html,/已写入 1 条段落修改/);assert.match(html,/查看修改前版本/);
 });
 
-test('mounted opinion composer sends by click and guarded shortcut with attachments alone',async()=>{
+for (const [platform, modifier] of [['MacIntel','metaKey'],['Win32','ctrlKey']]) test(`mounted opinion composer sends by click and guarded shortcut with attachments alone (${platform})`,async(t)=>{
+  const navigatorDescriptor=Object.getOwnPropertyDescriptor(globalThis,'navigator');
+  Object.defineProperty(globalThis,'navigator',{value:{platform},configurable:true});
+  t.after(()=>{if(navigatorDescriptor)Object.defineProperty(globalThis,'navigator',navigatorDescriptor);else delete globalThis.navigator;});
   const harness=await hookComponent("export {AssistantComposer as Component} from './src/assistant/AssistantComposer.jsx';"),sent=[];
   const props={a:{context:{page:'script'},draft:{mode:'rewrite',instruction:''},capabilities:{},scope:'selection',change(){},submit:()=>assert.fail('attachments must use exact revision route')},project:novel,revisionChat:{notes:[{id:'n'}],ready:true,busy:false,send:()=>sent.push('send')}};
   const tree=harness.render(props),textarea=walkElements(tree).find(node=>node.type==='textarea'),submit=()=>tree.props.onSubmit({preventDefault(){}});
   submit();assert.equal(sent.length,1);
-  for(const event of [{key:'Enter',metaKey:true,isComposing:true},{key:'Enter',ctrlKey:true,nativeEvent:{isComposing:true}},{key:'Enter'},{key:'Enter',metaKey:true,repeat:true}])textarea.props.onKeyDown({...event,currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});
+  for(const event of [{key:'Enter',[modifier]:true,isComposing:true},{key:'Enter',[modifier]:true,nativeEvent:{isComposing:true}},{key:'Enter'},{key:'Enter',[modifier]:true,repeat:true},{key:'Enter',[modifier==='metaKey'?'ctrlKey':'metaKey']:true}])textarea.props.onKeyDown({...event,currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});
   assert.equal(sent.length,1);
-  textarea.props.onKeyDown({key:'Enter',metaKey:true,nativeEvent:{isComposing:false},currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});assert.equal(sent.length,2);
+  textarea.props.onKeyDown({key:'Enter',[modifier]:true,nativeEvent:{isComposing:false},currentTarget:{form:{requestSubmit:submit}},preventDefault(){}});assert.equal(sent.length,2);
   const blocked=harness.render({...props,revisionChat:{...props.revisionChat,ready:false}});blocked.props.onSubmit({preventDefault(){}});assert.equal(sent.length,2);
 });
 

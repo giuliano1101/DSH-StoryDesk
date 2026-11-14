@@ -30,19 +30,24 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: ${{ matrix.node }}
+          node-version: 22
       - name: Install pinned pnpm and locked dependencies
         run: |
           npm install --global pnpm@11.25.0
           pnpm install --frozen-lockfile
+      - name: Select runtime under test
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: ${{ matrix.node }}
       - name: Core and documentation tests
         run: |
-          pnpm test
-          pnpm run test:docs
+          node --version
+          npm test
+          npm run test:docs
       - name: Build before packaging tests
         run: |
-          pnpm build
-          pnpm run test:sites
+          npm run build
+          npm run test:sites
       - name: Pack installable bundle
         if: matrix.os == 'ubuntu-latest' && matrix.node == 22
         run: |
