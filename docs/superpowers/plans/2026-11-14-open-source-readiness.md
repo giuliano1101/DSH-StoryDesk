@@ -23,4 +23,4 @@
 - [x] Implement the link checker and add test:docs. Run the link check over maintained entry points and documents.
 - [x] Add least-privilege CI to install locked dependencies, run core/docs tests, build before Sites checks, pack the plugin, write checksums and upload workflow artifacts. Pin actions by immutable commit.
 - [x] Verify all tests/build/package checks, render the banner, scan tracked content and inspect file changes. Push only the repository preparation commit after verification; do not change the v0.9.4 release asset.
-- [ ] Set repository description, topics and support features; verify private visibility and inspect remote CI. Document any remaining public-launch decisions. Remote CI and synchronization are recorded in the final acceptance report.
+- [x] Set repository description, topics and support features; verify private visibility and inspect remote CI. Document any remaining public-launch decisions. Remote CI and synchronization are recorded in the final acceptance report.

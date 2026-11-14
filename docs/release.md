@@ -1,6 +1,6 @@
 # Maintainer release guide
 
-1. Review scope, compatibility and migration / backup requirements. Increment version for runtime changes and update CHANGELOG.md.
+1. Review scope, compatibility and migration / backup requirements. Increment version for runtime changes and update CHANGELOG.md. Refresh dependency notices against the lockfile when dependencies change, retaining original copyright and license text.
 2. In a clean checkout, install locked dependencies, run `pnpm test`, `pnpm run test:docs`, `pnpm build`, then `pnpm run test:sites`.
 3. Run `pnpm pack --pack-destination release-assets`. Inspect the tarball manifest and verify it contains runtime files but no user data or secrets. Generate SHA256SUMS.txt for the tarball.
 4. Commit source and tag the intended commit as `vX.Y.Z`. Create a GitHub Release draft, attach the tarball, checksum, dependency notices and installation notes; verify downloads before publishing the Release to authorized repository viewers.
