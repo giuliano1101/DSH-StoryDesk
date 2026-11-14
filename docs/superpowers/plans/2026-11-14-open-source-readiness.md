@@ -4,13 +4,13 @@
 
 **Goal:** Present StoryDesk professionally and make the verified Harness release easy to install, without changing repository visibility or the running app.
 
-**Architecture:** Repository-only documentation, original vector identity, GitHub community files and CI. Immutable v0.9.4 assets remain the install source. Chinese, English and Japanese landing pages share installation requirements and disclose the Chinese-first interface. License provenance is recorded separately from maintainer-authored documentation.
+**Architecture:** Repository-only documentation, AI-generated brand identity, GitHub community files and CI. Immutable v0.9.4 assets remain the install source. Chinese, English and Japanese landing pages share installation requirements and disclose the Chinese-first interface. License provenance is recorded separately from maintainer-authored documentation.
 
 **Tech Stack:** Markdown, SVG, GitHub Actions, Node test runner, pnpm.
 
 ## Task 1: Identity and onboarding
 - [x] Preserve the long-form Chinese guide as docs/user-guide.zh-CN.md. Replace README.md and add README.en.md / README.ja.md with release links, features, language status, screenshots and contributor entry points.
-- [x] Add docs/assets/hero.svg and icon.svg as original vector artwork. Add a synthetic-data diagnosis screenshot with an explicit fixture caption.
+- [x] Add docs/assets/hero.png and icon.png as built-in-image-generated artwork (superseding the initial manual vectors after author feedback). Add a synthetic-data diagnosis screenshot with an explicit fixture caption.
 - [x] Add docs/installation.md with private/public download routes, profile selection, compatibility, checksum, migration and troubleshooting. Cite official Harness packaging and plugin-manager docs.
 
 ## Task 2: Community and provenance

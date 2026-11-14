@@ -5,7 +5,7 @@ The repository remains private during preparation. Making a GitHub repository pu
 ## Prepared
 
 - [x] Chinese, English and Japanese project entry points; application language limitations stated.
-- [x] Original vector branding and a fictional-data screenshot with fixture disclosure.
+- [x] Built-in-image-generated branding and a fictional-data screenshot with fixture disclosure.
 - [x] Versioned prebuilt Harness package, SHA-256 and install / migration guide.
 - [x] MIT license retaining the existing notice, original-skill authorization record and dependency notices.
 - [x] Contribution, conduct, support, security, issue and pull request guidance.
@@ -20,7 +20,7 @@ The repository remains private during preparation. Making a GitHub repository pu
 - [ ] Review the complete skill snapshot for content the owner wants public; ownership and permission to include it under MIT were confirmed on 2026-11-14.
 - [ ] Check the latest GitHub Actions result and verify download / installation from a separate machine. Anonymous URL installation can only be tested after public access is enabled.
 - [ ] Enable and verify GitHub private vulnerability reporting after public access is chosen. The current private-repository API returned 404; the security policy gives a fallback without public disclosure.
-- [ ] Consider GitHub branch protection / rulesets appropriate to account capabilities. An upload-ready 1280×640 [social preview](assets/social-preview.png) is included; GitHub Settings → General → Social preview is a manual repository setting not changed by this commit. No account-level protections are claimed by these files.
+- [ ] Consider GitHub branch protection / rulesets appropriate to account capabilities. An upload-ready 2:1 [social preview](assets/social-preview.jpg) is included; GitHub Settings → General → Social preview is a manual repository setting not changed by this commit. No account-level protections are claimed by these files.
 
 ## Release discipline
 

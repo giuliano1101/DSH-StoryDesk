@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/assets/hero.svg" alt="DSH StoryDesk — A quieter space for bigger stories" width="100%" /></p>
+<p align="center"><img src="docs/assets/hero.png" alt="DSH StoryDesk — A quieter space for bigger stories" width="100%" /></p>
 
 <p align="center">
 <a href="https://github.com/giuliano1101/DSH-StoryDesk/releases/tag/v0.9.4"><img alt="Release 0.9.4" src="https://img.shields.io/badge/release-0.9.4-147CE5?style=flat-square" /></a>
