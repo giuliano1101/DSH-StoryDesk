@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security / 私密安全报告
+    url: https://github.com/giuliano1101/DSH-StoryDesk/blob/main/SECURITY.md
+    about: Do not disclose vulnerabilities or secrets in public issues.
+  - name: Installation / 安装指南
+    url: https://github.com/giuliano1101/DSH-StoryDesk/blob/main/docs/installation.md
+    about: Download, compatibility, checksums and migration.

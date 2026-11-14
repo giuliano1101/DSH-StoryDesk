@@ -1,0 +1,44 @@
+name: Bug report / 问题反馈
+description: Installation, editing, diagnosis or recovery problems / 安装与使用问题
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Please use fictional text. Never include keys or a private manuscript. 请勿上传密钥或私人原稿。Security reports: see SECURITY.md."
+  - type: input
+    id: version
+    attributes:
+      label: StoryDesk / Harness / OS versions · 版本信息
+      placeholder: "StoryDesk 0.9.4, Harness …, macOS …"
+    validations:
+      required: true
+  - type: input
+    id: profile
+    attributes:
+      label: Install route and active profile · 安装方式与配置
+      placeholder: "Release .tgz, desktop profile"
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps · 复现步骤
+      description: Include minimal fictional text if needed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected and actual behavior · 预期与实际结果
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs / screenshots · 脱敏日志或截图
+      description: Remove credentials, private project text and personal paths.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy check · 隐私检查
+      options:
+        - label: I removed secrets and private manuscripts / 已移除密钥与私人原稿
+          required: true

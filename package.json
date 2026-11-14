@@ -10,7 +10,8 @@
     "dev": "vite",
     "build": "vite build && node scripts/prepare-sites-build.mjs && node scripts/build-plugin.mjs",
     "preview": "vite preview",
-    "test:sites": "node --test tests/sites-worker.test.mjs"
+    "test:sites": "node --test tests/sites-worker.test.mjs",
+    "test:docs": "node --test tests/docs.test.mjs && node scripts/check-docs.mjs"
   },
   "dependencies": {
     "docx": "^9.15.3"
@@ -47,7 +48,8 @@
     "CONTRACT.md",
     "README.md",
     "LICENSE",
-    "启动编剧工作台.command"
+    "启动编剧工作台.command",
+    "THIRD_PARTY_NOTICES.md"
   ],
   "devDependencies": {
     "@phosphor-icons/react": "^2.1.10",
@@ -65,5 +67,14 @@
   "homepage": "https://github.com/giuliano1101/DSH-StoryDesk#readme",
   "bugs": {
     "url": "https://github.com/giuliano1101/DSH-StoryDesk/issues"
-  }
+  },
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "creative-writing",
+    "screenwriting",
+    "novel",
+    "story-bible",
+    "ai-writing"
+  ]
 }

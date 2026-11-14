@@ -1,0 +1,21 @@
+name: Feature / translation · 功能与翻译建议
+description: Suggest a focused workflow, accessibility or documentation improvement
+title: "[Feature]: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Author problem · 希望解决什么问题
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Desired workflow · 期望的使用流程
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Alternatives, language or examples · 替代方案、语言或示例
+      description: Fictional examples only; no private manuscripts.

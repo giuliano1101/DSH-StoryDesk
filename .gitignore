@@ -17,3 +17,4 @@ settings.json
 *.pem
 *.key
 output/
+release-assets/
