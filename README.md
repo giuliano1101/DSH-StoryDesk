@@ -47,13 +47,13 @@
 dsh plugin --profile desktop add ./dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-**公开后的地址安装方式**：在 Harness「添加插件」粘贴下方完整地址，或作为 `dsh plugin ... add` 的参数：
+**地址安装方式**：在 Harness「添加插件」粘贴下方完整地址，或作为 `dsh plugin ... add` 的参数：
 
 ```text
 https://github.com/giuliano1101/DSH-StoryDesk/releases/download/v0.9.4/dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-仓库目前仍为私有。私有期间请登录有权限的 GitHub 账号下载到本机后安装，不能假定 Harness 能认证私有下载地址。兼容声明为 Harness `>=0.2.1-rc.5 <0.3.0`、Node `>=20`；不要据此推断所有未来版本都兼容。详见 [安装、校验与迁移](docs/installation.md)。
+仓库已公开，可直接下载安装包，无需登录 GitHub。兼容声明为 Harness `>=0.2.1-rc.5 <0.3.0`、Node `>=20`；不要据此推断所有未来版本都兼容。详见 [安装、校验与迁移](docs/installation.md)。
 
 ## 你的稿件，你的决定
 

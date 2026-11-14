@@ -46,13 +46,13 @@ With an installed `dsh` CLI, target the profile you actually use; `desktop` is a
 dsh plugin --profile desktop add ./dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-After this repository becomes public, the release URL can also be entered in Harness's Add plugin field:
+The public release URL can also be entered in Harness's Add plugin field:
 
 ```text
 https://github.com/giuliano1101/DSH-StoryDesk/releases/download/v0.9.4/dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-**The repository is currently private.** Sign in to an authorized GitHub account and download locally first; Harness may not authenticate private asset URLs. Declared compatibility: Harness `>=0.2.1-rc.5 <0.3.0`, Node `>=20`. See the bilingual [installation guide](docs/installation.md) for checksums, migration and troubleshooting.
+**The repository is public.** Downloading the release package does not require a GitHub account. Declared compatibility: Harness `>=0.2.1-rc.5 <0.3.0`, Node `>=20`. See the bilingual [installation guide](docs/installation.md) for checksums, migration and troubleshooting.
 
 ## Language, privacy and status
 

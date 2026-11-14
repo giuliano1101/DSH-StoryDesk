@@ -14,7 +14,7 @@ Download the `.tgz` asset, not **Source code**. Install through Harness's plugin
 https://github.com/giuliano1101/DSH-StoryDesk/releases/download/v0.9.4/dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-**私有期间 / While private:** the URL is not anonymous. Use your authorized browser account to download first, or use `gh release download v0.9.4 --repo giuliano1101/DSH-StoryDesk --pattern '*.tgz'` with an authenticated GitHub CLI. Do not paste access tokens into installation URLs. Public direct URL installation becomes available when the repository is deliberately made public.
+**公开下载 / Public download:** the release URL above is accessible without a GitHub account. Paste it into Harness’s supported package / tarball installation field, or download it locally first. No access token belongs in the installation URL.
 
 ## CLI 与 profile / CLI and profiles
 
@@ -28,7 +28,7 @@ dsh plugin --profile desktop add ./dsh-screenwriter-desk-0.9.4.tgz
 dsh plugin --profile web add ./dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-After public launch, the release URL above can replace the local path. No npm package has been published for StoryDesk; `npm install dsh-screenwriter-desk` is not the supported install route. Git source installation is not advertised: the repository does not track compiled `dist/` and does not run a prepare build at install time. Use the prebuilt Release tarball.
+The public release URL above can replace the local path. No npm package has been published for StoryDesk; `npm install dsh-screenwriter-desk` is not the supported install route. Git source installation is not advertised: the repository does not track compiled `dist/` and does not run a prepare build at install time. Use the prebuilt Release tarball.
 
 官方依据 / Official references, checked 2026-11-14: [Package and install a plugin](https://github.com/deepseek-ai/deepseek-harness/blob/master/docs/user/develop/basic/publish.md), [Plugin manager](https://github.com/deepseek-ai/deepseek-harness/blob/master/packages/client/ui-plugin-manager/README.md). Harness is evolving; installer wording may differ across versions.
 
@@ -64,7 +64,7 @@ This project has no automatic cloud sync. Uninstalling / reinstalling code is no
 
 ## 常见问题 / Troubleshooting
 
-- **404 on download:** private repository or missing access; log into the authorized account and download locally.
+- **404 on download:** check the version and full release asset URL; this public repository does not require account authentication. GitHub access can still be affected by local network / proxy settings.
 - **Old API / restart message:** fully quit the app, rather than just closing its window, then reopen after saving.
 - **No AI model:** configure a provider in Harness, refresh the assistant catalog and select an available model. Ordinary editing remains usable.
 - **Installed but no entry:** check the active profile and whether the installed bundle is enabled.

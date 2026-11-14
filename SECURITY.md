@@ -2,7 +2,7 @@
 
 ## Reporting / 报告
 
-Please do **not** put vulnerabilities, credentials or private manuscripts in public issues. Check the repository [Security tab](https://github.com/giuliano1101/DSH-StoryDesk/security) for a **Report a vulnerability** button. GitHub private vulnerability reporting is not currently available on this private repository and must be enabled / verified at public launch. Include affected version, minimal synthetic reproduction, impact and relevant redacted logs. If no private form is available, use an existing private channel with the maintainer, or open a sanitized issue requesting a private reporting channel without exploit details. Do not disclose a vulnerability publicly just because the private form is unavailable. There is no promised response SLA or bug bounty.
+Please do **not** put vulnerabilities, credentials or private manuscripts in public issues. Use [GitHub private vulnerability reporting](https://github.com/giuliano1101/DSH-StoryDesk/security/advisories/new), also available from the repository Security tab’s **Report a vulnerability** button. Include affected version, minimal synthetic reproduction, impact and relevant redacted logs. If no private form is available, use an existing private channel with the maintainer, or open a sanitized issue requesting a private reporting channel without exploit details. Do not disclose a vulnerability publicly just because the private form is unavailable. There is no promised response SLA or bug bounty.
 
 ## Supported scope
 

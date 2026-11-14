@@ -36,13 +36,13 @@
 dsh plugin --profile desktop add ./dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-公開後は以下の URL を Harness のプラグイン追加欄に指定する方法も利用できます。
+以下の公開 URL を Harness のプラグイン追加欄に指定する方法も利用できます。
 
 ```text
 https://github.com/giuliano1101/DSH-StoryDesk/releases/download/v0.9.4/dsh-screenwriter-desk-0.9.4.tgz
 ```
 
-現在リポジトリは非公開です。権限のある GitHub アカウントでログインし、先にローカルへダウンロードしてください。互換性の宣言：Harness `>=0.2.1-rc.5 <0.3.0`、Node `>=20`。チェックサムや移行は [インストールガイド（中文 / English）](docs/installation.md) を参照してください。
+リポジトリは公開されています。インストールパッケージのダウンロードに GitHub へのログインは不要です。互換性の宣言：Harness `>=0.2.1-rc.5 <0.3.0`、Node `>=20`。チェックサムや移行は [インストールガイド（中文 / English）](docs/installation.md) を参照してください。
 
 ### 言語・プライバシー
 
