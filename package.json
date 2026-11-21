@@ -14,7 +14,7 @@
     "test:docs": "node --test tests/docs.test.mjs && node scripts/check-docs.mjs"
   },
   "dependencies": {
-    "docx": "^9.15.3"
+    "docx": "^9.15.4"
   },
   "description": "多项目小说与剧本创作工作台：作品设定、人物世界观、章节与分场、正文、AI 协作与版本导出。",
   "main": "plugin/host.mjs",
