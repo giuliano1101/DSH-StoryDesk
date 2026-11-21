@@ -9,8 +9,8 @@ importers:
   .:
     dependencies:
       docx:
-        specifier: ^9.15.3
-        version: 9.15.3
+        specifier: ^9.15.4
+        version: 9.15.4
     devDependencies:
       '@phosphor-icons/react':
         specifier: ^2.1.10
@@ -18,6 +18,9 @@ importers:
       '@vitejs/plugin-react':
         specifier: 5.0.4
         version: 5.0.4(vite@6.4.2(@types/node@26.6.5))
+      esbuild:
+        specifier: 0.25.12
+        version: 0.25.12
       react:
         specifier: 19.2.0
         version: 19.2.0
@@ -27,9 +30,6 @@ importers:
       vite:
         specifier: 6.4.2
         version: 6.4.2(@types/node@26.6.5)
-      esbuild:
-        specifier: 0.25.12
-        version: 0.25.12
 
 packages:
 
@@ -492,8 +492,8 @@ packages:
       supports-color:
         optional: true
 
-  docx@9.15.3:
-    resolution: {integrity: sha512-3FnU6K5cuvGXEAn24yhvP3mfrZ1G8k9+hH8pSVDYsMR+mGmfK/t0NR5AwoMQodnaaxiRt2e+SvckffcJe/NvTQ==}
+  docx@9.15.4:
+    resolution: {integrity: sha512-5UUTdR+eE7KVeNroYYt6K0Ixi9yez18BBKnypz3XyQSR8FsVYTiZ4vqKZr83JHjYPAgO+Tw7T/+13KyITpkgFw==}
     engines: {node: '>=16'}
 
   electron-to-chromium@1.5.479:
@@ -1011,7 +1011,7 @@ snapshots:
     dependencies:
       ms: 2.1.3
 
-  docx@9.15.3:
+  docx@9.15.4:
     dependencies:
       '@types/node': 26.6.5
       fflate: 0.8.3
